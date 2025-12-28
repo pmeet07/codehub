@@ -52,7 +52,7 @@ const Login = () => {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-dark-bg relative overflow-hidden p-4">
+        <div className="min-h-[100dvh] flex items-center justify-center bg-dark-bg relative overflow-hidden p-4">
             {/* Animated Background Elements */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute top-[-10%] right-[-10%] w-[500px] h-[500px] bg-primary-600/20 rounded-full blur-[120px] mix-blend-screen animate-blob" />
@@ -89,7 +89,7 @@ const Login = () => {
                 </div>
 
                 {/* Right Side - Form */}
-                <div className="p-8 md:p-12 flex flex-col justify-center bg-dark-card/40">
+                <div className="p-6 sm:p-8 md:p-12 flex flex-col justify-center bg-dark-card/40">
                     <div className="text-center md:text-left mb-8">
                         <h2 className="text-2xl font-bold text-white">Sign In</h2>
                         <p className="text-sm text-gray-400 mt-2">Enter your credentials to access your account.</p>
@@ -170,13 +170,12 @@ const Login = () => {
                             </div>
                         </div>
 
-                        <div className="mt-6 flex justify-center">
+                        <div className="mt-6 flex justify-center w-full overflow-hidden">
                             <GoogleLogin
                                 onSuccess={handleGoogleSuccess}
                                 onError={handleGoogleError}
                                 theme="filled_black"
                                 shape="pill"
-                                width="300px"
                             />
                         </div>
                     </div>

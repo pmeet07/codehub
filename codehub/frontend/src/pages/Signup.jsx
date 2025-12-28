@@ -28,7 +28,7 @@ const Signup = () => {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-dark-bg relative overflow-hidden p-4">
+        <div className="min-h-[100dvh] flex items-center justify-center bg-dark-bg relative overflow-hidden p-4">
             {/* Animated Background Elements */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-primary-600/20 rounded-full blur-[120px] mix-blend-screen animate-blob" />
@@ -76,7 +76,7 @@ const Signup = () => {
                 </div>
 
                 {/* Right Side - Form */}
-                <div className="p-8 md:p-12 flex flex-col justify-center bg-dark-card/40">
+                <div className="p-6 sm:p-8 md:p-12 flex flex-col justify-center bg-dark-card/40">
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
