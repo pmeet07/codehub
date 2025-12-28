@@ -1,133 +1,137 @@
-# Deployment Guide to AWS EC2
+# Docker Deployment Guide for AWS EC2
 
-This guide outlines the steps to deploy the **CodeHub** application (Node.js Backend + React Frontend) to an AWS EC2 instance (Ubuntu).
+This guide outlines how to deploy the **CodeHub** application using **Docker and Docker Compose**. This is the easiest and most robust method.
 
 ## Prerequisites
-- An AWS Account.
-- Verify you have SSH access to your EC2 instance.
+1.  **AWS Account**: Launch an EC2 instance (Ubuntu 22.04/24.04).
+2.  **Security Group**: Ensure ports **22 (SSH)** and **80 (HTTP)** are open.
 
 ---
 
-## Step 1: Launch and Configure EC2
-1.  **Launch Instance**: Go to AWS Console -> EC2 -> Launch Instance.
-    -   **OS**: Ubuntu Server 22.04 LTS (or 24.04).
-    -   **Instance Type**: t2.micro (Free Tier) or larger.
-    -   **Key Pair**: Create or select an existing `.pem` key.
-2.  **Security Group**: Allow the following ports:
-    -   SSH (22) - My IP (for security)
-    -   HTTP (80) - Anywhere
-    -   HTTPS (443) - Anywhere
-
-## Step 2: Connect to Server
-Open your terminal and SSH into the instance:
+## 🚀 Step 1: Install Docker on EC2
+Connect to your instance via SSH:
 ```bash
-ssh -i /path/to/your-key.pem ubuntu@<your-ec2-public-ip>
+ssh -i "path-to-key.pem" ubuntu@<your-ec2-ip>
 ```
 
-## Step 3: Install Dependencies
-Update the system and install Node.js, Nginx, and Git.
-
+Run these commands to install Docker & Docker Compose:
 ```bash
-# Update packages
-sudo apt update && sudo apt upgrade -y
+# Update and install Docker
+sudo apt-get update
+sudo apt-get install -y docker.io
 
-# Install Node.js (v20)
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs
+# Start Docker
+sudo systemctl start docker
+sudo systemctl enable docker
 
-# Install Nginx
-sudo apt install -y nginx
+# Install Docker Compose
+sudo curl -L "https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
 
-# Install PM2 (Process Manager) globally
-sudo npm install -g pm2
+# Add user to docker group (avoids typing 'sudo' every time)
+sudo usermod -aG docker $USER
 ```
-
-## Step 4: Clone the Repository
-Clone your project into `/var/www/codehub`.
-
-```bash
-# Create directory
-sudo mkdir -p /var/www/codehub
-sudo chown -R ubuntu:ubuntu /var/www/codehub
-
-# Clone (Replace with your actual repo URL)
-git clone <YOUR_GITHUB_REPO_URL> /var/www/codehub
-# OR if you are copying files manually, use SCP/SFTP
-```
-
-## Step 5: Setup Backend
-1.  Navigate to the backend folder:
-    ```bash
-    cd /var/www/codehub/backend
-    ```
-2.  Install dependencies:
-    ```bash
-    npm install
-    ```
-3.  **Environment Variables**: Create a `.env` file.
-    ```bash
-    nano .env
-    ```
-    Paste your variables:
-    ```
-    PORT=5000
-    MONGO_URI=<your_production_mongo_connection_string>
-    JWT_SECRET=<your_secret>
-    GEMINI_API_KEY=<your_key>
-    ```
-    *(Note: For MongoDB, ensure your Atlas cluster allows the EC2 IP address)*
-
-4.  Start Backend with PM2:
-    ```bash
-    cd /var/www/codehub
-    pm2 start deployment/ecosystem.config.js
-    pm2 save
-    pm2 startup
-    # (Run the command output by pm2 startup to configure auto-start)
-    ```
-
-## Step 6: Setup Frontend
-1.  Navigate to the frontend folder:
-    ```bash
-    cd /var/www/codehub/frontend
-    ```
-2.  **Environment Variables**: Create a `.env` file for build time.
-    ```bash
-    nano .env
-    ```
-    Add local API path (since Nginx will proxy it):
-    ```
-    VITE_API_URL=/api
-    ```
-3.  Install and Build:
-    ```bash
-    npm install
-    npm run build
-    ```
-    This creates a `dist` folder.
-
-## Step 7: Configure Nginx
-1.  Copy the configuration file provided in `deployment/nginx.conf`:
-    ```bash
-    sudo cp /var/www/codehub/deployment/nginx.conf /etc/nginx/sites-available/codehub
-    ```
-2.  Enable the site:
-    ```bash
-    sudo ln -s /etc/nginx/sites-available/codehub /etc/nginx/sites-enabled/
-    sudo rm /etc/nginx/sites-enabled/default  # Remove default welcome page
-    ```
-3.  Test and Restart Nginx:
-    ```bash
-    sudo nginx -t
-    sudo systemctl restart nginx
-    ```
-
-## Step 8: Verify
-- Open your browser and visit `http://<your-ec2-public-ip>`.
-- The frontend should load.
-- API calls should work via `http://<your-ec2-public-ip>/api/...`.
+**LOG OUT and log back in** for the group change to take effect.
 
 ---
-**Troubleshooting**:
-- If API fails, check backend logs: `pm2 logs`
-- If 502 Bad Gateway, backend might not be running on port 5000.
+
+## 📂 Step 2: Get the Code
+Clone your repository:
+```bash
+git clone <YOUR_GITHUB_REPO_URL>
+cd codehub
+```
+
+---
+
+## 🔑 Step 3: Create Secret Files
+Docker cannot see your local secrets. You MUST create them on the server.
+
+### 1. Backend Secrets
+```bash
+nano backend/.env
+```
+Paste this (edit with your real keys):
+```env
+PORT=5000
+# Docker manages the mongo connection using the hostname 'mongo':
+MONGO_URI=mongodb://mongo:27017/codehub
+JWT_SECRET=supersecuresecret
+GEMINI_API_KEY=your_actual_gemini_key
+GOOGLE_CLIENT_ID=your_google_client_id
+```
+*(Save: Ctrl+X, Y, Enter)*
+
+### 2. Frontend Secrets
+```bash
+nano frontend/.env
+```
+Paste this:
+```env
+VITE_GOOGLE_CLIENT_ID=your_google_client_id
+# VITE_API_URL is NOT needed here; Docker sets it to /api automatically.
+```
+*(Save: Ctrl+X, Y, Enter)*
+
+---
+
+## 🐳 Step 4: Launch the Application
+Build and start all services (Frontend, Backend, Database) in the background:
+
+```bash
+docker-compose up -d --build
+```
+- Wait 1-2 minutes for the build to finish and containers to start.
+
+---
+
+## 🛠 Step 5: Initialize the Database (One-Time Setup)
+Since this is a new database, you need to create the Admin user.
+
+Run this command **while the containers are running**:
+```bash
+docker exec -it codehub-backend node seedAdmin.js
+```
+- **Login with**: `admin@codehub.com` / `admin123`
+
+---
+
+## ✅ Step 6: Verify
+Open your browser to: `http://<YOUR_EC2_IP>`
+- Frontend should load.
+- Try "Sign In" to verify a connection to the backend.
+
+---
+
+## 🔄 Updating the App
+If you push new code to GitHub, follow these steps to update your live site:
+
+1.  **Pull changes**:
+    ```bash
+    git pull
+    ```
+2.  **Rebuild containers**:
+    ```bash
+    docker-compose up -d --build
+    ```
+
+---
+
+## ❓ Troubleshooting
+
+### Connection Refused?
+- Check EC2 **Security Groups**: Is Port 80 Open?
+- Check if containers are running:
+    ```bash
+    docker ps
+    ```
+
+### Backend Errors?
+- View logs:
+    ```bash
+    docker logs codehub-backend
+    ```
+
+### "Login Failed" or Network Error?
+- Ensure the admin user was created (Step 5).
+- Open Browser DevTools (F12) > Network to see if the request to `/api/auth/login` is failing.
