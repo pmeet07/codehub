@@ -13,7 +13,7 @@ export default function AdminLogs() {
             <h1 className="text-2xl font-bold mb-6">Audit Logs</h1>
             <div className="bg-white dark:bg-[#161b22] border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden shadow-sm">
                 <table className="w-full text-left text-sm text-gray-500 dark:text-gray-400">
-                    <thead className="bg-gray-50 dark:bg-[#0d1117] text-gray-700 dark:text-gray-200 border-b border-gray-200 dark:border-gray-700">
+                    <thead className="bg-white dark:bg-[#0d1117] text-gray-700 dark:text-gray-200 border-b border-gray-200 dark:border-gray-700">
                         <tr>
                             <th className="p-4 font-semibold">Action</th>
                             <th className="p-4 font-semibold">Admin</th>

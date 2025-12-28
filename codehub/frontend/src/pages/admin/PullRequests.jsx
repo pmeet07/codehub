@@ -53,7 +53,7 @@ export default function AdminPullRequests() {
             <div className="dark:bg-[#161b22] bg-white border dark:border-gray-700 border-gray-200 rounded-lg overflow-hidden">
                 <table className="w-full text-left border-collapse">
                     <thead>
-                        <tr className="bg-gray-100 dark:bg-[#21262d] border-b dark:border-gray-700 border-gray-200">
+                        <tr className="bg-white dark:bg-[#21262d] border-b dark:border-gray-700 border-gray-200">
                             <th className="p-4 text-sm font-semibold dark:text-gray-300 text-gray-700">Title</th>
                             <th className="p-4 text-sm font-semibold dark:text-gray-300 text-gray-700">Repository</th>
                             <th className="p-4 text-sm font-semibold dark:text-gray-300 text-gray-700">Author</th>

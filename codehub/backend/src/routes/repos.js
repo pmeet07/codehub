@@ -13,6 +13,11 @@ router.post('/', auth, repoController.createRepo);
 // @access  Private
 router.get('/user', auth, repoController.getUserRepos);
 
+// @route   GET api/repos/:repoId/download
+// @desc    Download repository as ZIP
+// @access  Public (Access control inside)
+router.get('/:repoId/download', repoController.downloadRepoZip);
+
 // @route   GET api/repos/:username/:repoName
 // @desc    Get repository details
 // @access  Public (Partial) - we will apply auth check inside controller for private repos
@@ -28,6 +33,13 @@ router.post('/:repoId/push', auth, repoController.pushUpdates);
 // @desc    Get file content
 // @access  Public (should optionally assign access control)
 router.get('/:repoId/blob/:hash', repoController.getFileContent);
+
+// @route   GET api/repos/:repoId/commits
+// @desc    Get commit history
+// @access  Public (Access control inside)
+router.get('/:repoId/commits', repoController.getCommits);
+
+// @route   DELETE api/repos/:repoId
 
 // @route   DELETE api/repos/:repoId
 // @desc    Delete a repository
@@ -45,5 +57,7 @@ router.delete('/:repoId/branches/:branchName', auth, repoController.deleteBranch
 // @desc    Update a file
 // @access  Private
 router.post('/:repoId/file', auth, repoController.updateFile);
+
+
 
 module.exports = router;

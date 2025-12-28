@@ -5,6 +5,9 @@ const fs = require('fs-extra');
 const path = require('path');
 const crypto = require('crypto');
 const zlib = require('zlib');
+const archiver = require('archiver');
+const jwt = require('jsonwebtoken');
+const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey123';
 
 exports.createRepo = async (req, res) => {
     try {
@@ -77,7 +80,7 @@ exports.getRepoByName = async (req, res) => {
             // Fallback: If repo.headCommit is missing, try default branch
             const defaultHash = repo.branches.get(repo.defaultBranch);
             if (defaultHash) {
-                targetCommit = await Commit.findOne({ hash: defaultHash }); // Try global search if needed? Better to scope by repoId optionally but global is safer for read
+                targetCommit = await Commit.findOne({ hash: defaultHash });
             }
         }
 
@@ -88,6 +91,73 @@ exports.getRepoByName = async (req, res) => {
             try {
                 const treeContent = await fs.readFile(path.join(storagePath, treeHash));
                 tree = JSON.parse(treeContent);
+
+                // --- Calculate File Last Modified Times (Basic Walk) ---
+                // We will try to find the last commit time for each file
+                // Limit depth to avoid timeout
+                const MAX_DEPTH = 20;
+                const fileDates = {}; // path -> date
+                const itemsToResolve = new Set(tree.map(f => f.path));
+
+                let current = targetCommit;
+                let currentTreeLocal = tree;
+                let depth = 0;
+
+                while (current && itemsToResolve.size > 0 && depth < MAX_DEPTH) {
+                    const commitDate = current.timestamp;
+
+                    // If no parent, everything remaining was created/modified here
+                    if (!current.parentHash) {
+                        for (const p of itemsToResolve) {
+                            fileDates[p] = commitDate;
+                        }
+                        break;
+                    }
+
+                    // Load Parent
+                    const parent = await Commit.findOne({ repoId: repo._id, hash: current.parentHash });
+                    if (!parent) break; // Should not happen if consistency maintained
+
+                    // Load Parent Tree
+                    let parentTree = [];
+                    try {
+                        const ptContent = await fs.readFile(path.join(storagePath, parent.treeHash));
+                        parentTree = JSON.parse(ptContent);
+                    } catch (e) { /* Parent tree missing? */ }
+
+                    // Create lookup for parent tree hashes
+                    const parentTreeMap = new Map();
+                    parentTree.forEach(f => parentTreeMap.set(f.path, f.hash));
+
+                    // Check files
+                    for (const f of currentTreeLocal) {
+                        if (!itemsToResolve.has(f.path)) continue;
+
+                        const parentFileHash = parentTreeMap.get(f.path);
+                        // If hash is different or didn't exist in parent, it was modified in CURRENT commit
+                        if (parentFileHash !== f.hash) {
+                            fileDates[f.path] = commitDate;
+                            itemsToResolve.delete(f.path);
+                        }
+                    }
+
+                    // Prepare for next iteration
+                    current = parent;
+                    currentTreeLocal = parentTree;
+                    depth++;
+                }
+
+                // Fill remaining with oldest found date or just target date as fallback
+                for (const path of itemsToResolve) {
+                    fileDates[path] = current ? current.timestamp : targetCommit.timestamp;
+                }
+
+                // Inject into tree
+                tree = tree.map(f => ({
+                    ...f,
+                    lastModified: fileDates[f.path] || targetCommit.timestamp
+                }));
+
             } catch (e) {
                 console.error("Failed to read tree object", e);
             }
@@ -101,6 +171,97 @@ exports.getRepoByName = async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: err.message });
+    }
+};
+
+exports.downloadRepoZip = async (req, res) => {
+    try {
+        const { repoId } = req.params;
+        const { branch, token } = req.query;
+
+        // Manual Auth Check for Download Link
+        if (token) {
+            try {
+                const decoded = jwt.verify(token, JWT_SECRET);
+                req.user = decoded; // Matches auth middleware structure
+            } catch (e) {
+                // Invalid token, assume guest
+            }
+        }
+
+        const repo = await Repository.findById(repoId);
+        if (!repo) return res.status(404).json({ message: 'Repo not found' });
+
+        // Check privacy access if necessary... (skipping for brevity, rely on middleware or check)
+        if (repo.isPrivate && (!req.user || req.user.id !== repo.owner.toString())) {
+            return res.status(403).json({ message: 'Access denied' });
+        }
+
+        // Find Commit
+        let commitHash;
+        if (branch) {
+            commitHash = repo.branches.get(branch);
+        } else {
+            commitHash = repo.branches.get(repo.defaultBranch || 'main');
+        }
+
+        if (!commitHash) return res.status(404).json({ message: 'Branch/Commit not found' });
+
+        const commit = await Commit.findOne({ repoId, hash: commitHash });
+        if (!commit) return res.status(404).json({ message: 'Commit object missing' });
+
+        // Load Tree
+        const storagePath = path.join(__dirname, '../../storage', repoId);
+        const treePath = path.join(storagePath, commit.treeHash);
+
+        if (!fs.existsSync(treePath)) return res.status(404).json({ message: 'Tree missing' });
+
+        const tree = JSON.parse(await fs.readFile(treePath));
+
+        // Prepare Archive
+        const archive = archiver('zip', {
+            zlib: { level: 9 }
+        });
+
+        res.attachment(`${repo.name}-${branch || 'main'}.zip`);
+
+        archive.pipe(res);
+
+        // Append files
+        // Note: Tree is flat. For true recursion we'd need hierarchical handling, 
+        // but our system uses flat paths (e.g., "src/index.js")
+        for (const file of tree) {
+            if (file.type === 'blob') {
+                const filePath = path.join(storagePath, file.hash);
+                if (fs.existsSync(filePath)) {
+                    // We need to decompress! Our storage stores Zlib or Raw? 
+                    // Controller logic says `zlib.inflateSync`. 
+                    // Ideally we should stream. 
+                    const fileContent = await fs.readFile(filePath);
+                    let finalBuffer;
+                    try {
+                        const decompressed = zlib.inflateSync(fileContent);
+                        // Strip header
+                        const nullIndex = decompressed.indexOf(0);
+                        if (nullIndex !== -1 && nullIndex < 50) {
+                            finalBuffer = decompressed.slice(nullIndex + 1);
+                        } else {
+                            finalBuffer = decompressed;
+                        }
+                    } catch (e) {
+                        finalBuffer = fileContent; // Fallback
+                    }
+
+                    archive.append(finalBuffer, { name: file.path });
+                }
+            }
+        }
+
+        await archive.finalize();
+
+    } catch (err) {
+        console.error("Zip Error:", err);
+        if (!res.headersSent) res.status(500).json({ message: "Failed to generate ZIP" });
     }
 };
 
@@ -255,6 +416,61 @@ exports.pushUpdates = async (req, res) => {
 
     } catch (err) {
         console.error("Push Error:", err);
+        res.status(500).json({ message: err.message });
+    }
+};
+
+exports.getCommits = async (req, res) => {
+    try {
+        const { repoId } = req.params;
+        const { branch } = req.query;
+
+        const repo = await Repository.findById(repoId);
+        if (!repo) return res.status(404).json({ message: 'Repo not found' });
+
+        // Privacy check
+        if (repo.isPrivate && (!req.user || req.user.id !== repo.owner.toString())) {
+            return res.status(403).json({ message: 'Access denied' });
+        }
+
+        // Determine head
+        let headHash;
+        if (branch) {
+            headHash = repo.branches.get(branch);
+        } else {
+            headHash = repo.branches.get(repo.defaultBranch || 'main');
+        }
+
+        if (!headHash) return res.json([]); // No commits yet
+
+        // Walk history
+        const commits = [];
+        let currentHash = headHash;
+        const LIMIT = 100; // Limit history depth
+
+        // Optimization: Fetch all commits for this repo in one go and build map?
+        // Or fetch one by one? Fetching all is better for DB if repo isn't huge.
+        // For now, let's just fetch all repo commits and reconstruct in memory.
+
+        const allRepoCommits = await Commit.find({ repoId })
+            .populate('author', 'username avatarUrl')
+            .sort({ timestamp: -1 })
+            .lean();
+
+        const commitMap = new Map();
+        allRepoCommits.forEach(c => commitMap.set(c.hash, c));
+
+        while (currentHash && commits.length < LIMIT) {
+            const commit = commitMap.get(currentHash);
+            if (!commit) break;
+
+            commits.push(commit);
+            currentHash = commit.parentHash;
+        }
+
+        res.json(commits);
+    } catch (err) {
+        console.error("Get Commits Error:", err);
         res.status(500).json({ message: err.message });
     }
 };
