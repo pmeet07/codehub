@@ -1,0 +1,9 @@
+Starting Tests...
+
+-------------------
+Testing: gemini-2.5-flash
+✅ SUCCESS: gemini-2.5-flash
+
+-------------------
+Testing: gemini-flash-latest
+✅ SUCCESS: gemini-flash-latest

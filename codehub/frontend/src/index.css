@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    body {
+        @apply bg-dark-bg text-gray-200 antialiased selection:bg-primary-500/30 selection:text-white;
+    }
+}
+
+@layer utilities {
+    .glass {
+        @apply bg-[#161b22]/70 backdrop-blur-md border border-white/10 shadow-xl;
+    }
+
+    .glass-input {
+        @apply bg-black/20 border border-white/10 rounded-xl px-4 py-3 outline-none focus:border-primary-500/50 focus:bg-black/40 transition-all duration-300 placeholder:text-gray-400 text-white;
+    }
+
+    .blob-bg {
+        @apply absolute rounded-full mix-blend-screen filter blur-[100px] opacity-30 animate-blob;
+    }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    @apply bg-gray-800/50 rounded-full hover:bg-gray-700/80 transition-colors;
+}
+
+/* Utility to delay animations */
+.delay-100 {
+    animation-delay: 100ms;
+}
+
+.delay-200 {
+    animation-delay: 200ms;
+}
+
+.delay-300 {
+    animation-delay: 300ms;
+}
+
+.delay-500 {
+    animation-delay: 500ms;
+}
+
+.delay-700 {
+    animation-delay: 700ms;
+}
