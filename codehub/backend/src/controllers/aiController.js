@@ -90,11 +90,11 @@ The AI model is currently experiencing high traffic.
 Please **wait a few moments** and try again.` });
         }
 
-        // Handle Leaked Key (403)
-        if (err.message.includes("leaked") || err.message.includes("403")) {
+        // Handle Invalid or Leaked Key (400/403)
+        if (err.message.includes("API_KEY_INVALID") || err.message.includes("leaked") || err.message.includes("403") || err.message.includes("400")) {
             return res.json({
-                explanation: `### 🔒 API Key Blocked
-**Your Google Gemini API Key has been disabled because it was detected as leaked.**
+                explanation: `### 🔒 API Key Invalid or Blocked
+**Your Google Gemini API Key is invalid or has been disabled.**
 
 **To Fix:**
 1. Go to [Google AI Studio](https://aistudio.google.com/).
@@ -194,6 +194,14 @@ ${code}
 
     } catch (err) {
         console.error("AI Debug Error:", err.message);
+
+        if (err.message.includes("API_KEY_INVALID") || err.message.includes("leaked") || err.message.includes("403") || err.message.includes("400")) {
+            return res.json({
+                bugs: [],
+                error: "API Key Invalid or Blocked. Please check backend/.env"
+            });
+        }
+
         return res.json({
             bugs: [],
             error: "Failed to analyze code. " + (err.message || "Unknown error")
