@@ -462,7 +462,7 @@ exports.clone = async (url) => {
                 console.log(chalk.gray(`Restoring ${file.path}...`));
 
                 // Fetch Blob Content
-                const { data: content } = await axios.get(`${API_URL}/repos/${repo._id}/blob/${file.hash}`);
+                const { data: content } = await axios.get(`${API_URL}/repos/${repo.id}/blob/${file.hash}`);
 
                 await fs.outputFile(filePath, content);
                 await fs.writeFile(path.join(targetDir, '.codehub', 'objects', file.hash), content);

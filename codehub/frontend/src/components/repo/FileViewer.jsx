@@ -223,24 +223,67 @@ export default function FileViewer({ file, content, onClose, repo, branch }) {
                 {/* Content Area */}
                 <div className="flex-1 flex overflow-hidden">
                     {/* Monaco Editor */}
-                    <div className={`transition-all duration-300 ease-in-out ${(showExplain || showDebug) ? 'w-1/2 border-r border-github-border' : 'w-full'}`}>
-                        <Editor
-                            height="100%"
-                            defaultLanguage={getLanguage(file.path)}
-                            value={isEditing ? newContent : content}
-                            onChange={(value) => setNewContent(value)}
-                            theme="vs-dark"
-                            options={{
-                                readOnly: !isEditing,
-                                minimap: { enabled: !(showExplain || showDebug) }, // Disable minimap when split
-                                scrollBeyondLastLine: false,
-                                fontSize: 13,
-                                lineNumbers: 'on',
-                                automaticLayout: true,
-                                wordWrap: 'on',
-                                padding: { top: 10 }
-                            }}
-                        />
+                    {/* Monaco Editor or Markdown Preview */}
+                    <div className={`transition-all duration-300 ease-in-out bg-[#0d1117] ${(showExplain || showDebug) ? 'w-1/2 border-r border-github-border' : 'w-full'} overflow-y-auto`}>
+                        {!isEditing && getLanguage(file.path) === 'markdown' ? (
+                            <div className="p-8 max-w-4xl mx-auto">
+                                <article className="prose prose-invert prose-lg max-w-none">
+                                    <ReactMarkdown
+                                        components={{
+                                            h1: ({ node, ...props }) => <h1 className="text-3xl font-bold text-white mb-6 pb-2 border-b border-gray-700" {...props} />,
+                                            h2: ({ node, ...props }) => <h2 className="text-2xl font-bold text-white mt-8 mb-4 border-b border-gray-800 pb-1" {...props} />,
+                                            h3: ({ node, ...props }) => <h3 className="text-xl font-bold text-white mt-6 mb-3" {...props} />,
+                                            p: ({ node, ...props }) => <p className="leading-7 mb-4 text-gray-300" {...props} />,
+                                            ul: ({ node, ...props }) => <ul className="list-disc list-inside mb-4 space-y-1 text-gray-300" {...props} />,
+                                            ol: ({ node, ...props }) => <ol className="list-decimal list-inside mb-4 space-y-1 text-gray-300" {...props} />,
+                                            li: ({ node, ...props }) => <li className="ml-4" {...props} />,
+                                            a: ({ node, ...props }) => <a className="text-blue-400 hover:text-blue-300 hover:underline" target="_blank" rel="noopener noreferrer" {...props} />,
+                                            strong: ({ node, ...props }) => <strong className="text-white font-bold" {...props} />,
+                                            blockquote: ({ node, ...props }) => <blockquote className="border-l-4 border-gray-600 pl-4 py-1 my-4 text-gray-400 italic" {...props} />,
+                                            code: ({ node, inline, className, children, ...props }) => {
+                                                const match = /language-(\w+)/.exec(className || '')
+                                                return !inline ? (
+                                                    <div className="bg-[#161b22] rounded-md my-4 border border-gray-700 overflow-hidden shadow-sm">
+                                                        <div className="text-xs text-gray-400 bg-[#21262d] px-3 py-1.5 border-b border-gray-700 font-mono">
+                                                            {match ? match[1] : 'code'}
+                                                        </div>
+                                                        <div className="p-4 overflow-x-auto">
+                                                            <code className={`${className} font-mono text-sm`} {...props}>
+                                                                {children}
+                                                            </code>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <code className="bg-[#2d333b] px-1.5 py-0.5 rounded text-gray-200 text-sm font-mono border border-gray-700 mx-1" {...props}>
+                                                        {children}
+                                                    </code>
+                                                )
+                                            }
+                                        }}
+                                    >
+                                        {content}
+                                    </ReactMarkdown>
+                                </article>
+                            </div>
+                        ) : (
+                            <Editor
+                                height="100%"
+                                defaultLanguage={getLanguage(file.path)}
+                                value={isEditing ? newContent : content}
+                                onChange={(value) => setNewContent(value)}
+                                theme="vs-dark"
+                                options={{
+                                    readOnly: !isEditing,
+                                    minimap: { enabled: !(showExplain || showDebug) }, // Disable minimap when split
+                                    scrollBeyondLastLine: false,
+                                    fontSize: 13,
+                                    lineNumbers: 'on',
+                                    automaticLayout: true,
+                                    wordWrap: 'on',
+                                    padding: { top: 10 }
+                                }}
+                            />
+                        )}
                     </div>
 
                     {/* AI Explanation Panel */}
