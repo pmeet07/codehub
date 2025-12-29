@@ -18,11 +18,7 @@ router.get('/user', auth, repoController.getUserRepos);
 // @access  Public (Access control inside)
 router.get('/:repoId/download', repoController.downloadRepoZip);
 
-// @route   GET api/repos/:username/:repoName
-// @desc    Get repository details
-// @access  Public (Partial) - we will apply auth check inside controller for private repos
-// Note: We might want an optional auth middleware here to identify the user if they ARE logged in
-router.get('/:username/:repoName', repoController.getRepoByName);
+
 
 // @route   POST api/repos/:repoId/push
 // @desc    Push commits and objects
@@ -59,5 +55,11 @@ router.delete('/:repoId/branches/:branchName', auth, repoController.deleteBranch
 router.post('/:repoId/file', auth, repoController.updateFile);
 
 
+
+// @route   GET api/repos/:username/:repoName
+// @desc    Get repository details
+// @access  Public (Partial) - we will apply auth check inside controller for private repos
+// Note: We might want an optional auth middleware here to identify the user if they ARE logged in
+router.get('/:username/:repoName', repoController.getRepoByName);
 
 module.exports = router;

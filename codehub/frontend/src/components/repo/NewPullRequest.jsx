@@ -37,8 +37,8 @@ export default function NewPullRequest({ repo, onCancel, onSuccess }) {
         try {
             await api.post('/pull-requests', {
                 ...formData,
-                sourceRepoId: repo._id,
-                targetRepoId: repo.forkedFrom || repo._id
+                sourceRepoId: repo.id,
+                targetRepoId: repo.forkedFromId || repo.id
             });
             onSuccess();
         } catch (err) {

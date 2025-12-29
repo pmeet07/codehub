@@ -1,20 +1,17 @@
-const mongoose = require('mongoose');
+const { User, sequelize } = require('./src/models');
 const bcrypt = require('bcryptjs');
 require('dotenv').config();
 
-const User = require('./src/models/User');
-
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/codehub';
-
-mongoose.connect(MONGO_URI)
-    .then(async () => {
-        console.log('MongoDB Connected');
+const seedAdmin = async () => {
+    try {
+        await sequelize.authenticate();
+        console.log('PostgreSQL Connected');
 
         const email = 'admin@codehub.com';
         const password = 'admin123';
         const username = 'admin';
 
-        let user = await User.findOne({ email });
+        let user = await User.findOne({ where: { email } });
 
         if (user) {
             console.log('Admin user already exists. Updating role...');
@@ -26,14 +23,13 @@ mongoose.connect(MONGO_URI)
             const salt = await bcrypt.genSalt(10);
             const hashedPassword = await bcrypt.hash(password, salt);
 
-            user = new User({
+            user = await User.create({
                 username,
                 email,
                 password: hashedPassword,
                 role: 'admin'
             });
 
-            await user.save();
             console.log('Admin user created successfully');
         }
 
@@ -45,9 +41,11 @@ Password: ${password}
 =========================================
         `);
 
-        mongoose.disconnect();
-    })
-    .catch(err => {
+        await sequelize.close();
+    } catch (err) {
         console.error(err);
         process.exit(1);
-    });
+    }
+};
+
+seedAdmin();

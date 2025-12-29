@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const { User } = require('../models');
 
 module.exports = async function (req, res, next) {
     // 1. Verify Token
@@ -12,7 +12,7 @@ module.exports = async function (req, res, next) {
         req.user = decoded; // { id: '...', ... }
 
         // 2. Database Check (CRITICAL)
-        const user = await User.findById(req.user.id);
+        const user = await User.findByPk(req.user.id);
 
         if (!user || user.role !== 'admin') {
             return res.status(403).json({ message: 'Access denied: Admins only' });

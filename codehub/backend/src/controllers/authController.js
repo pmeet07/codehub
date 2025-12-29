@@ -2,6 +2,7 @@ const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
+const { Op } = require('sequelize');
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -20,7 +21,12 @@ exports.register = async (req, res) => {
         }
 
         // Check if user exists
-        const existingUser = await User.findOne({ $or: [{ email }, { username }] });
+        const existingUser = await User.findOne({
+            where: {
+                [Op.or]: [{ email }, { username }]
+            }
+        });
+
         if (existingUser) {
             return res.status(400).json({ message: 'User already exists' });
         }
@@ -30,21 +36,19 @@ exports.register = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, salt);
 
         // Create user
-        const newUser = new User({
+        const savedUser = await User.create({
             username,
             email,
             password: hashedPassword
         });
 
-        const savedUser = await newUser.save();
-
         // Create Token
-        const token = jwt.sign({ id: savedUser._id }, JWT_SECRET, { expiresIn: '1d' });
+        const token = jwt.sign({ id: savedUser.id }, JWT_SECRET, { expiresIn: '1d' });
 
         res.status(201).json({
             token,
             user: {
-                id: savedUser._id,
+                id: savedUser.id,
                 username: savedUser.username,
                 email: savedUser.email
             }
@@ -66,7 +70,7 @@ exports.login = async (req, res) => {
         }
 
         // Check for user
-        const user = await User.findOne({ email });
+        const user = await User.findOne({ where: { email } });
         if (!user) {
             return res.status(400).json({ message: 'User does not exist' });
         }
@@ -94,12 +98,12 @@ exports.login = async (req, res) => {
         }
 
         // Create Token
-        const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '1d' });
+        const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '1d' });
 
         res.json({
             token,
             user: {
-                id: user._id,
+                id: user.id,
                 username: user.username,
                 email: user.email,
                 avatarUrl: user.avatarUrl,
@@ -127,7 +131,7 @@ exports.googleLogin = async (req, res) => {
         console.log('Google Payload:', { name, email });
 
         // Check if user exists
-        let user = await User.findOne({ email });
+        let user = await User.findOne({ where: { email } });
 
         if (user) {
             // Check ban
@@ -150,27 +154,26 @@ exports.googleLogin = async (req, res) => {
             // Ensure username is unique
             let isUnique = false;
             while (!isUnique) {
-                const existing = await User.findOne({ username });
+                const existing = await User.findOne({ where: { username } });
                 if (!existing) isUnique = true;
                 else username += Math.floor(Math.random() * 100);
             }
 
-            user = new User({
+            user = await User.create({
                 username,
                 email,
                 googleId: sub,
                 avatarUrl: picture,
                 role: 'user' // Default role
             });
-            await user.save();
         }
 
-        const jwtToken = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: '1d' });
+        const jwtToken = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '1d' });
 
         res.json({
             token: jwtToken,
             user: {
-                id: user._id,
+                id: user.id,
                 username: user.username,
                 email: user.email,
                 avatarUrl: user.avatarUrl,
@@ -187,7 +190,9 @@ exports.googleLogin = async (req, res) => {
 // Get current user (protected route helper)
 exports.getCurrentUser = async (req, res) => {
     try {
-        const user = await User.findById(req.user.id).select('-password');
+        const user = await User.findByPk(req.user.id, {
+            attributes: { exclude: ['password'] }
+        });
         res.json(user);
     } catch (err) {
         res.status(500).json({ message: 'Server error' });

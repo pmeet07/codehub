@@ -68,7 +68,7 @@ export default function AdminPullRequests() {
                             </tr>
                         ) : (
                             prs.map(pr => (
-                                <tr key={pr._id} className="border-b dark:border-gray-700 border-gray-100 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                                <tr key={pr.id} className="border-b dark:border-gray-700 border-gray-100 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800/50">
                                     <td className="p-4 dark:text-white text-gray-800 font-medium">{pr.title}</td>
                                     <td className="p-4 text-sm dark:text-gray-400 text-gray-600">
                                         {pr.repository?.name || 'Unknown'}
@@ -87,14 +87,14 @@ export default function AdminPullRequests() {
                                         <div className="flex justify-end gap-2">
                                             {pr.status === 'open' && (
                                                 <button
-                                                    onClick={() => handleForceClose(pr._id)}
+                                                    onClick={() => handleForceClose(pr.id)}
                                                     className="text-orange-500 hover:text-orange-700 text-sm font-bold border border-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20 px-3 py-1 rounded transition"
                                                 >
                                                     Close
                                                 </button>
                                             )}
                                             <button
-                                                onClick={() => handleDelete(pr._id)}
+                                                onClick={() => handleDelete(pr.id)}
                                                 className="text-white bg-red-600 hover:bg-red-700 text-sm font-bold px-3 py-1 rounded transition"
                                             >
                                                 Delete

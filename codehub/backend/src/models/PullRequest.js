@@ -1,66 +1,85 @@
-const mongoose = require('mongoose');
+const { DataTypes, Model } = require('sequelize');
+const sequelize = require('../config/database');
 
-const PullRequestSchema = new mongoose.Schema({
-    title: {
-        type: String,
-        required: true,
-        trim: true
+class PullRequest extends Model { }
+
+PullRequest.init({
+    id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true
     },
-    description: String,
+    title: {
+        type: DataTypes.STRING,
+        allowNull: false
+    },
+    description: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
     status: {
-        type: String,
-        enum: ['open', 'closed', 'merged'],
-        default: 'open'
+        type: DataTypes.ENUM('open', 'closed', 'merged'),
+        defaultValue: 'open'
     },
     number: {
-        type: Number,
-        required: true
+        type: DataTypes.INTEGER,
+        allowNull: false
     },
-    repository: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Repository',
-        required: true
+    repositoryId: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: {
+            model: 'repositories',
+            key: 'id'
+        }
     },
-    sourceRepo: { // The repository coming FROM (could be a fork)
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Repository',
-        default: null // If null, means same repo
+    sourceRepoId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+            model: 'repositories',
+            key: 'id'
+        }
     },
     sourceBranch: {
-        type: String,
-        required: true
+        type: DataTypes.STRING,
+        allowNull: false
     },
     targetBranch: {
-        type: String,
-        required: true
+        type: DataTypes.STRING,
+        allowNull: false
     },
-    author: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
-    },
-    reviewers: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
-    }],
-    createdAt: {
-        type: Date,
-        default: Date.now
-    },
-    updatedAt: {
-        type: Date,
-        default: Date.now
+    authorId: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: {
+            model: 'users',
+            key: 'id'
+        }
     },
     mergedAt: {
-        type: Date
+        type: DataTypes.DATE,
+        allowNull: true
     },
-    mergedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
+    mergedById: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+            model: 'users',
+            key: 'id'
+        }
     }
+}, {
+    sequelize,
+    modelName: 'PullRequest',
+    tableName: 'pull_requests',
+    timestamps: true,
+    indexes: [
+        {
+            unique: true,
+            fields: ['repositoryId', 'number']
+        }
+    ]
 });
 
-// Ensure unique PR number per repo
-PullRequestSchema.index({ repository: 1, number: 1 }, { unique: true });
-
-module.exports = mongoose.model('PullRequest', PullRequestSchema);
+module.exports = PullRequest;

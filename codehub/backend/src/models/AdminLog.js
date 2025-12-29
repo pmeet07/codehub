@@ -1,12 +1,47 @@
-const mongoose = require('mongoose');
+const { DataTypes, Model } = require('sequelize');
+const sequelize = require('../config/database');
 
-const AdminLogSchema = new mongoose.Schema({
-    adminId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    action: { type: String, required: true }, // e.g., "DELETE_REPO", "BAN_USER"
-    targetId: { type: String }, // ID of the User or Repo affected
-    details: { type: Object }, // JSON details of the change
-    ipAddress: { type: String },
-    timestamp: { type: Date, default: Date.now }
+class AdminLog extends Model { }
+
+AdminLog.init({
+    id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true
+    },
+    adminId: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: {
+            model: 'users',
+            key: 'id'
+        }
+    },
+    action: {
+        type: DataTypes.STRING,
+        allowNull: false
+    },
+    targetId: {
+        type: DataTypes.STRING, // Can be User ID or Repo ID
+        allowNull: true
+    },
+    details: {
+        type: DataTypes.JSONB,
+        allowNull: true
+    },
+    ipAddress: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    timestamp: {
+        type: DataTypes.DATE,
+        defaultValue: DataTypes.NOW
+    }
+}, {
+    sequelize,
+    modelName: 'AdminLog',
+    tableName: 'admin_logs',
+    timestamps: false // using timestamp field
 });
 
-module.exports = mongoose.model('AdminLog', AdminLogSchema);
+module.exports = AdminLog;

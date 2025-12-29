@@ -1,9 +1,7 @@
-const PullRequest = require('../models/PullRequest');
-const Repository = require('../models/Repository');
-const Commit = require('../models/Commit');
-const User = require('../models/User');
+const { PullRequest, Repository, Commit, User, Branch } = require('../models');
 const fs = require('fs-extra');
 const path = require('path');
+const { Op } = require('sequelize');
 
 exports.createPullRequest = async (req, res) => {
     try {
@@ -16,7 +14,6 @@ exports.createPullRequest = async (req, res) => {
             targetBranch
         } = req.body;
 
-        // Validation
         if (!sourceRepoId || !targetRepoId || !sourceBranch || !targetBranch || !title) {
             return res.status(400).json({ message: 'Missing required fields' });
         }
@@ -24,31 +21,32 @@ exports.createPullRequest = async (req, res) => {
             return res.status(400).json({ message: 'Source and target branch cannot be the same.' });
         }
 
-        const sourceRepo = await Repository.findById(sourceRepoId);
-        const targetRepo = await Repository.findById(targetRepoId);
+        const sourceRepo = await Repository.findByPk(sourceRepoId);
+        const targetRepo = await Repository.findByPk(targetRepoId);
 
         if (!sourceRepo || !targetRepo) {
             return res.status(404).json({ message: 'Repository not found' });
         }
 
-        // Calculate next PR number
-        const lastPR = await PullRequest.findOne({ repository: targetRepoId }).sort({ number: -1 });
+        // Calculate next PR number using max
+        const lastPR = await PullRequest.findOne({
+            where: { repositoryId: targetRepoId },
+            order: [['number', 'DESC']]
+        });
         const number = (lastPR && !isNaN(lastPR.number)) ? lastPR.number + 1 : 1;
 
-        // Create PR
-        const newPR = new PullRequest({
+        const newPR = await PullRequest.create({
             title,
             number,
             description,
-            repository: targetRepoId, // The repo receiving the PR
-            sourceRepo: sourceRepoId,
+            repositoryId: targetRepoId,
+            sourceRepoId: sourceRepoId,
             sourceBranch,
             targetBranch,
-            author: req.user.id
+            authorId: req.user.id
         });
 
-        const savedPR = await newPR.save();
-        res.status(201).json(savedPR);
+        res.status(201).json(newPR);
 
     } catch (err) {
         console.error(err);
@@ -61,13 +59,17 @@ exports.getPullRequests = async (req, res) => {
         const { repoId } = req.params;
         const { status } = req.query;
 
-        const query = { repository: repoId };
-        if (status) query.status = status;
+        const where = { repositoryId: repoId };
+        if (status) where.status = status;
 
-        const prs = await PullRequest.find(query)
-            .populate('author', 'username avatarUrl')
-            .populate('sourceRepo', 'name owner')
-            .sort({ createdAt: -1 });
+        const prs = await PullRequest.findAll({
+            where,
+            include: [
+                { model: User, as: 'author', attributes: ['username', 'avatarUrl'] },
+                { model: Repository, as: 'sourceRepo', attributes: ['name', 'ownerId'] }
+            ],
+            order: [['createdAt', 'DESC']]
+        });
 
         res.json(prs);
     } catch (err) {
@@ -78,10 +80,13 @@ exports.getPullRequests = async (req, res) => {
 exports.getPullRequestById = async (req, res) => {
     try {
         const { id } = req.params;
-        const pr = await PullRequest.findById(id)
-            .populate('author', 'username avatarUrl')
-            .populate('repository') // Target
-            .populate('sourceRepo');
+        const pr = await PullRequest.findByPk(id, {
+            include: [
+                { model: User, as: 'author', attributes: ['username', 'avatarUrl'] },
+                { model: Repository, as: 'repository' },
+                { model: Repository, as: 'sourceRepo' }
+            ]
+        });
 
         if (!pr) return res.status(404).json({ message: 'Pull request not found' });
 
@@ -96,29 +101,30 @@ exports.mergePullRequest = async (req, res) => {
         const { id } = req.params;
         console.log(`[Merge] Starting merge for PR ${id}`);
 
-        const pr = await PullRequest.findById(id);
+        const pr = await PullRequest.findByPk(id);
         if (!pr) return res.status(404).json({ message: 'Pull request not found' });
         if (pr.status !== 'open') return res.status(400).json({ message: 'PR is not open' });
 
-        const targetRepo = await Repository.findById(pr.repository);
-        const sourceRepo = await Repository.findById(pr.sourceRepo);
+        const targetRepo = await Repository.findByPk(pr.repositoryId);
+        const sourceRepo = await Repository.findByPk(pr.sourceRepoId);
 
         if (!targetRepo || !sourceRepo) return res.status(404).json({ message: 'Repository not found' });
 
-        if (targetRepo.owner.toString() !== req.user.id) {
+        if (targetRepo.ownerId !== req.user.id) {
             return res.status(403).json({ message: 'Access denied' });
         }
 
         // 1. Get Source Branch Head Commit
-        const sourceHeadHash = sourceRepo.branches.get(pr.sourceBranch);
-        if (!sourceHeadHash) return res.status(400).json({ message: 'Source branch not found' });
+        const sourceBranchRecord = await Branch.findOne({ where: { repoId: sourceRepo.id, name: pr.sourceBranch } });
+        if (!sourceBranchRecord) return res.status(400).json({ message: 'Source branch not found' });
+        const sourceHeadHash = sourceBranchRecord.commitHash;
 
         // 2. Sync objects/commits
         const queue = [sourceHeadHash];
         const visited = new Set();
 
-        const targetStoragePath = path.join(__dirname, '../../storage', targetRepo._id.toString());
-        const sourceStoragePath = path.join(__dirname, '../../storage', sourceRepo._id.toString());
+        const targetStoragePath = path.join(__dirname, '../../storage', targetRepo.id.toString());
+        const sourceStoragePath = path.join(__dirname, '../../storage', sourceRepo.id.toString());
         await fs.ensureDir(targetStoragePath);
 
         while (queue.length > 0) {
@@ -126,13 +132,11 @@ exports.mergePullRequest = async (req, res) => {
             if (visited.has(currentHash)) continue;
             visited.add(currentHash);
 
-            // Optimization: Skip if target already has this commit
-            const targetCommitExists = await Commit.findOne({ repoId: targetRepo._id, hash: currentHash });
+            const targetCommitExists = await Commit.findOne({ where: { repoId: targetRepo.id, hash: currentHash } });
             if (targetCommitExists) continue;
 
-            // Get Source Commit with Safe Fallback
-            let sourceCommit = await Commit.findOne({ repoId: sourceRepo._id, hash: currentHash });
-            if (!sourceCommit) sourceCommit = await Commit.findOne({ hash: currentHash }); // Global fallback
+            let sourceCommit = await Commit.findOne({ where: { repoId: sourceRepo.id, hash: currentHash } });
+            if (!sourceCommit) sourceCommit = await Commit.findOne({ where: { hash: currentHash } });
 
             if (!sourceCommit) {
                 console.warn(`[Merge] Commit ${currentHash} missing from DB. Skipping.`);
@@ -141,16 +145,15 @@ exports.mergePullRequest = async (req, res) => {
 
             try {
                 // Copy Commit Record
-                const newCommit = new Commit({
-                    repoId: targetRepo._id,
+                await Commit.create({
+                    repoId: targetRepo.id,
                     hash: sourceCommit.hash,
                     message: sourceCommit.message,
-                    author: sourceCommit.author,
+                    authorId: sourceCommit.authorId,
                     parentHash: sourceCommit.parentHash,
                     treeHash: sourceCommit.treeHash,
                     timestamp: sourceCommit.timestamp
                 });
-                await newCommit.save();
 
                 // Copy Tree Object
                 const sourceTreePath = path.join(sourceStoragePath, sourceCommit.treeHash);
@@ -160,7 +163,6 @@ exports.mergePullRequest = async (req, res) => {
                 }
             } catch (innerErr) {
                 console.error(`[Merge] Error copying commit ${currentHash}:`, innerErr);
-                // Continue despite error to try best-effort merge
             }
 
             if (sourceCommit.parentHash) {
@@ -168,7 +170,7 @@ exports.mergePullRequest = async (req, res) => {
             }
         }
 
-        // Bulk Copy Blobs (Safety Net)
+        // Bulk Copy Blobs
         try {
             await fs.copy(sourceStoragePath, targetStoragePath, { overwrite: false, errorOnExist: false });
         } catch (copyErr) {
@@ -176,25 +178,32 @@ exports.mergePullRequest = async (req, res) => {
         }
 
         // 3. Update Target Repo Branch
-        if (!targetRepo.branches) targetRepo.branches = new Map();
-        targetRepo.branches.set(pr.targetBranch, sourceHeadHash);
-        targetRepo.markModified('branches');
+        const [targetBranchRecord, created] = await Branch.findOrCreate({
+            where: { repoId: targetRepo.id, name: pr.targetBranch },
+            defaults: { commitHash: sourceHeadHash }
+        });
+
+        if (!created) {
+            targetBranchRecord.commitHash = sourceHeadHash;
+            await targetBranchRecord.save();
+        }
 
         if (pr.targetBranch === targetRepo.defaultBranch) {
             try {
-                const headCommitObj = await Commit.findOne({ repoId: targetRepo._id, hash: sourceHeadHash });
-                if (headCommitObj) targetRepo.headCommit = headCommitObj._id;
+                const headCommitObj = await Commit.findOne({ where: { repoId: targetRepo.id, hash: sourceHeadHash } });
+                if (headCommitObj) {
+                    targetRepo.headCommitId = headCommitObj.id;
+                    await targetRepo.save();
+                }
             } catch (err) {
                 console.error("[Merge] Failed to update headCommit pointer:", err);
             }
         }
 
-        await targetRepo.save();
-
         // 4. Update PR Status
         pr.status = 'merged';
-        pr.mergedAt = Date.now();
-        pr.mergedBy = req.user.id;
+        pr.mergedAt = new Date();
+        pr.mergedById = req.user.id;
         await pr.save();
 
         console.log(`[Merge] PR ${id} merged successfully.`);
@@ -209,16 +218,14 @@ exports.mergePullRequest = async (req, res) => {
 exports.updatePullRequestStatus = async (req, res) => {
     try {
         const { id } = req.params;
-        const { status } = req.body; // closed
+        const { status } = req.body;
 
-        const pr = await PullRequest.findById(id);
+        const pr = await PullRequest.findByPk(id);
         if (!pr) return res.status(404).json({ message: 'PR not found' });
 
-        // Check auth (Author or Maintainer)
-        // For simplicity: only Target Repo Owner can close for now, or Author?
-        // Let's say author can close, or repo owner.
-        const repo = await Repository.findById(pr.repository);
-        if (pr.author.toString() !== req.user.id && repo.owner.toString() !== req.user.id) {
+        const repo = await Repository.findByPk(pr.repositoryId);
+        // Only author or repo owner can close
+        if (pr.authorId !== req.user.id && repo.ownerId !== req.user.id) {
             return res.status(403).json({ message: 'Access denied' });
         }
 

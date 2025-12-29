@@ -116,7 +116,7 @@ export default function AdminDashboard() {
                         ) : (
                             recentUsers.map((user, idx) => (
                                 <div
-                                    key={user._id}
+                                    key={user.id}
                                     className="flex items-center justify-between border-b dark:border-gray-700 border-gray-100 pb-3 last:border-0 last:pb-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 p-2 rounded transition-colors"
                                     style={{ animation: `fadeIn 0.5s ease-out ${idx * 0.1}s forwards`, opacity: 0 }}
                                 >
@@ -145,7 +145,7 @@ export default function AdminDashboard() {
                         ) : (
                             recentLogs.map((log, idx) => (
                                 <div
-                                    key={log._id}
+                                    key={log.id}
                                     className="flex items-start gap-3 border-b dark:border-gray-700 border-gray-100 pb-3 last:border-0 last:pb-0 hover:bg-gray-50 dark:hover:bg-gray-800/50 p-2 rounded transition-colors"
                                     style={{ animation: `fadeIn 0.5s ease-out ${idx * 0.1}s forwards`, opacity: 0 }}
                                 >

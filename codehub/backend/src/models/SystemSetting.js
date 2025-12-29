@@ -1,20 +1,43 @@
-const mongoose = require('mongoose');
+const { DataTypes, Model } = require('sequelize');
+const sequelize = require('../config/database');
 
-const SystemSettingSchema = new mongoose.Schema({
-    allowRegistration: { type: Boolean, default: true },
-    maintenanceMode: { type: Boolean, default: false },
-    maxRepoSizeMB: { type: Number, default: 500 },
-    defaultBranchName: { type: String, default: 'main' },
-    updatedAt: { type: Date, default: Date.now }
+class SystemSetting extends Model {
+    static async getConfig() {
+        let config = await this.findOne();
+        if (!config) {
+            config = await this.create({});
+        }
+        return config;
+    }
+}
+
+SystemSetting.init({
+    id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true
+    },
+    allowRegistration: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true
+    },
+    maintenanceMode: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false
+    },
+    maxRepoSizeMB: {
+        type: DataTypes.INTEGER,
+        defaultValue: 500
+    },
+    defaultBranchName: {
+        type: DataTypes.STRING,
+        defaultValue: 'main'
+    }
+}, {
+    sequelize,
+    modelName: 'SystemSetting',
+    tableName: 'system_settings',
+    timestamps: true
 });
 
-// Singleton pattern helper
-SystemSettingSchema.statics.getConfig = async function () {
-    let config = await this.findOne();
-    if (!config) {
-        config = await this.create({});
-    }
-    return config;
-};
-
-module.exports = mongoose.model('SystemSetting', SystemSettingSchema);
+module.exports = SystemSetting;

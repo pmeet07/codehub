@@ -1,57 +1,76 @@
-const mongoose = require('mongoose');
+const { DataTypes, Model } = require('sequelize');
+const sequelize = require('../config/database');
+const { v4: uuidv4 } = require('uuid');
 
-const UserSchema = new mongoose.Schema({
+class User extends Model { }
+
+User.init({
+    id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true,
+        allowNull: false
+    },
     username: {
-        type: String,
-        required: true,
+        type: DataTypes.STRING,
+        allowNull: false,
         unique: true,
-        trim: true,
-        minlength: 3
+        validate: {
+            notEmpty: true,
+            len: [3, 255]
+        }
     },
     email: {
-        type: String,
-        required: true,
+        type: DataTypes.STRING,
+        allowNull: false,
         unique: true,
-        trim: true,
-        lowercase: true
+        validate: {
+            isEmail: true,
+            notEmpty: true
+        }
     },
     googleId: {
-        type: String,
+        type: DataTypes.STRING,
         unique: true,
-        sparse: true
+        allowNull: true
     },
     password: {
-        type: String,
-        required: false
+        type: DataTypes.STRING,
+        allowNull: true
     },
     avatarUrl: {
-        type: String,
-        default: 'https://github.com/identicons/default.png' // Placeholder
+        type: DataTypes.STRING,
+        defaultValue: 'https://github.com/identicons/default.png'
     },
     role: {
-        type: String,
-        enum: ['user', 'admin'],
-        default: 'user'
+        type: DataTypes.ENUM('user', 'admin'),
+        defaultValue: 'user'
     },
     isBanned: {
-        type: Boolean,
-        default: false
+        type: DataTypes.BOOLEAN,
+        defaultValue: false
     },
     banExpiresAt: {
-        type: Date,
-        default: null
+        type: DataTypes.DATE,
+        allowNull: true
     },
-    repositories: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Repository'
-    }],
-    bio: String,
-    location: String,
-    website: String,
-    createdAt: {
-        type: Date,
-        default: Date.now
+    bio: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    location: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    website: {
+        type: DataTypes.STRING,
+        allowNull: true
     }
+}, {
+    sequelize,
+    modelName: 'User',
+    tableName: 'users',
+    timestamps: true
 });
 
-module.exports = mongoose.model('User', UserSchema);
+module.exports = User;

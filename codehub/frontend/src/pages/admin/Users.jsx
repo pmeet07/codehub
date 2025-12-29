@@ -13,7 +13,7 @@ export default function AdminUsers() {
     const toggleBan = async (id) => {
         try {
             const { data } = await api.put(`/admin/users/${id}/ban`);
-            setUsers(users.map(u => u._id === id ? { ...u, isBanned: data.user.isBanned } : u));
+            setUsers(users.map(u => u.id === id ? { ...u, isBanned: data.user.isBanned } : u));
         } catch (err) {
             alert(err.response?.data?.message || 'Action failed');
         }
@@ -51,7 +51,7 @@ export default function AdminUsers() {
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                         {users.map(user => (
-                            <tr key={user._id} className="hover:bg-gray-50 dark:hover:bg-[#21262d] transition-colors">
+                            <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-[#21262d] transition-colors">
                                 <td className="p-4 flex items-center gap-3">
                                     <img src={user.avatarUrl} alt="" className="w-8 h-8 rounded-full border border-gray-200 dark:border-gray-700" />
                                     <div>
@@ -82,14 +82,14 @@ export default function AdminUsers() {
                                         <div className="flex gap-2 justify-end">
                                             {!user.isBanned && (
                                                 <button
-                                                    onClick={() => handleTempBan(user._id)}
+                                                    onClick={() => handleTempBan(user.id)}
                                                     className="text-xs px-3 py-1 rounded border border-orange-300 text-orange-600 hover:bg-orange-50 dark:border-orange-500 dark:text-orange-400 dark:hover:bg-orange-900/30 transition"
                                                 >
                                                     Suspend
                                                 </button>
                                             )}
                                             <button
-                                                onClick={() => toggleBan(user._id)}
+                                                onClick={() => toggleBan(user.id)}
                                                 className={`text-xs px-3 py-1 rounded border transition ${user.isBanned
                                                     ? 'border-green-300 text-green-600 hover:bg-green-50 dark:border-green-600 dark:text-green-400 dark:hover:bg-green-900/30'
                                                     : 'border-red-300 text-red-600 hover:bg-red-50 dark:border-red-600 dark:text-red-400 dark:hover:bg-red-900/30'

@@ -6,7 +6,7 @@ module.exports = {
             env: {
                 NODE_ENV: "production",
                 PORT: 5000,
-                // Add other environment variables here or use a .env file
+                DATABASE_URL: "postgres://user:password@localhost:5432/codehub_db"
             },
         },
     ],

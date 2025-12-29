@@ -265,7 +265,7 @@ exports.push = async () => {
         const branchName = repoConfig.currentBranch || 'main'; // Default to main
         console.log(chalk.blue(`Pushing to ${username}/${repoName} (${branchName})...`));
 
-        await axios.post(`${API_URL}/repos/${repo._id}/push`, {
+        await axios.post(`${API_URL}/repos/${repo.id}/push`, {
             commits: [commit],
             objects,
             branch: branchName
@@ -327,7 +327,7 @@ exports.pull = async () => {
 
             // If we don't have the blob object locally, fetch it (Optimization: check fs.exists)
             if (!fs.existsSync(objectPath)) {
-                const { data: content } = await axios.get(`${API_URL}/repos/${repo._id}/blob/${file.hash}`);
+                const { data: content } = await axios.get(`${API_URL}/repos/${repo.id}/blob/${file.hash}`);
                 await fs.outputFile(filePath, content); // Write to working dir
                 await fs.ensureDir(path.dirname(objectPath));
                 await fs.writeFile(objectPath, content); // Save to object store

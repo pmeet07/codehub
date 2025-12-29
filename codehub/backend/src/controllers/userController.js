@@ -1,26 +1,27 @@
-const User = require('../models/User');
+const { User } = require('../models');
 
 exports.updateProfile = async (req, res) => {
     try {
         const userId = req.user.id;
         const { bio, location, website, avatarUrl } = req.body;
 
-        const user = await User.findById(userId);
+        const user = await User.findByPk(userId);
         if (!user) {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        if (bio !== undefined) user.bio = bio;
-        if (location !== undefined) user.location = location;
-        if (website !== undefined) user.website = website;
-        if (avatarUrl !== undefined) user.avatarUrl = avatarUrl;
+        const updates = {};
+        if (bio !== undefined) updates.bio = bio;
+        if (location !== undefined) updates.location = location;
+        if (website !== undefined) updates.website = website;
+        if (avatarUrl !== undefined) updates.avatarUrl = avatarUrl;
 
-        await user.save();
+        await user.update(updates);
 
         res.json({
             message: 'Profile updated successfully',
             user: {
-                id: user._id,
+                id: user.id,
                 username: user.username,
                 email: user.email,
                 avatarUrl: user.avatarUrl,

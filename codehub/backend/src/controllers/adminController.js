@@ -1,41 +1,33 @@
-const User = require('../models/User');
-const Repository = require('../models/Repository');
-const PullRequest = require('../models/PullRequest'); // Import
-const AdminLog = require('../models/AdminLog');
-const SystemSetting = require('../models/SystemSetting');
-const Report = require('../models/Report');
+const { User, Repository, PullRequest, AdminLog, SystemSetting, Report, sequelize } = require('../models');
+const { Op } = require('sequelize');
 const fs = require('fs-extra');
 const path = require('path');
 
 exports.getDashboardStats = async (req, res) => {
     try {
-        const totalUsers = await User.countDocuments();
-        const totalRepos = await Repository.countDocuments();
-        const privateRepos = await Repository.countDocuments({ isPrivate: true });
-        const totalPRs = await PullRequest.countDocuments(); // Added stats
+        const totalUsers = await User.count();
+        const totalRepos = await Repository.count();
+        const privateRepos = await Repository.count({ where: { isPrivate: true } });
+        const totalPRs = await PullRequest.count();
 
-        // Example Aggregation: New users per day
-        const usersOverTime = await User.aggregate([
-            {
-                $group: {
-                    _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-                    count: { $sum: 1 }
-                }
-            },
-            { $sort: { _id: 1 } }
-        ]);
+        // New users per day (Last 30 days usually)
+        // using raw query for date formatting convenience across dialects or just simple group
+
 
         // Recent Users (Last 5)
-        const recentUsers = await User.find({ role: { $ne: 'admin' } })
-            .sort({ createdAt: -1 })
-            .limit(5)
-            .select('username email createdAt avatarUrl');
+        const recentUsers = await User.findAll({
+            where: { role: { [Op.ne]: 'admin' } },
+            order: [['createdAt', 'DESC']],
+            limit: 5,
+            attributes: ['id', 'username', 'email', 'createdAt', 'avatarUrl']
+        });
 
         // Recent Logs (Last 5)
-        const recentLogs = await AdminLog.find()
-            .sort({ timestamp: -1 })
-            .limit(5)
-            .populate('adminId', 'username');
+        const recentLogs = await AdminLog.findAll({
+            order: [['timestamp', 'DESC']],
+            limit: 5,
+            include: [{ model: User, as: 'admin', attributes: ['username'] }]
+        });
 
         res.json({
             stats: {
@@ -45,7 +37,7 @@ exports.getDashboardStats = async (req, res) => {
                 publicRepos: totalRepos - privateRepos,
                 totalPRs,
                 aiUsage: {
-                    dailyRequests: Math.floor(Math.random() * 50) + 10, // Mock for demo
+                    dailyRequests: Math.floor(Math.random() * 50) + 10, // Mock
                     totalGeneratedLines: 15420,
                     estimatedCost: 0.15
                 }
@@ -61,8 +53,11 @@ exports.getDashboardStats = async (req, res) => {
 
 exports.getUsers = async (req, res) => {
     try {
-        // Exclude admins from the list so they can't ban themselves/others via UI
-        const users = await User.find({ role: { $ne: 'admin' } }).select('-password').sort({ createdAt: -1 });
+        const users = await User.findAll({
+            where: { role: { [Op.ne]: 'admin' } },
+            attributes: { exclude: ['password'] },
+            order: [['createdAt', 'DESC']]
+        });
         res.json(users);
     } catch (err) {
         res.status(500).json({ message: 'Server Error' });
@@ -71,10 +66,9 @@ exports.getUsers = async (req, res) => {
 
 exports.toggleBanUser = async (req, res) => {
     try {
-        const user = await User.findById(req.params.id);
+        const user = await User.findByPk(req.params.id);
         if (!user) return res.status(404).json({ message: 'User not found' });
 
-        // Prevent banning self or other admins
         if (user.role === 'admin') {
             return res.status(400).json({ message: 'Cannot ban an admin' });
         }
@@ -82,11 +76,10 @@ exports.toggleBanUser = async (req, res) => {
         user.isBanned = !user.isBanned;
         await user.save();
 
-        // 3. Log Action
         await AdminLog.create({
             adminId: req.user.id,
             action: user.isBanned ? 'BAN_USER' : 'UNBAN_USER',
-            targetId: user._id.toString(),
+            targetId: user.id.toString(),
             details: { username: user.username },
             ipAddress: req.ip
         });
@@ -103,7 +96,7 @@ exports.tempBanUser = async (req, res) => {
         const days = parseInt(durationDays);
         if (isNaN(days) || days <= 0) return res.status(400).json({ message: 'Invalid duration' });
 
-        const user = await User.findById(req.params.id);
+        const user = await User.findByPk(req.params.id);
         if (!user) return res.status(404).json({ message: 'User not found' });
         if (user.role === 'admin') return res.status(400).json({ message: 'Cannot ban an admin' });
 
@@ -111,13 +104,13 @@ exports.tempBanUser = async (req, res) => {
         expiry.setDate(expiry.getDate() + days);
 
         user.banExpiresAt = expiry;
-        user.isBanned = false; // Reset permanent ban
+        user.isBanned = false;
         await user.save();
 
         await AdminLog.create({
             adminId: req.user.id,
             action: 'TEMP_BAN',
-            targetId: user._id.toString(),
+            targetId: user.id.toString(),
             details: { username: user.username, duration: days, expires: expiry },
             ipAddress: req.ip
         });
@@ -131,9 +124,10 @@ exports.tempBanUser = async (req, res) => {
 
 exports.getRepositories = async (req, res) => {
     try {
-        const repos = await Repository.find()
-            .populate('owner', 'username email')
-            .sort({ createdAt: -1 });
+        const repos = await Repository.findAll({
+            include: [{ model: User, as: 'owner', attributes: ['username', 'email'] }],
+            order: [['createdAt', 'DESC']]
+        });
         res.json(repos);
     } catch (err) {
         res.status(500).json({ message: 'Server Error' });
@@ -142,18 +136,17 @@ exports.getRepositories = async (req, res) => {
 
 exports.deleteRepository = async (req, res) => {
     try {
-        const repo = await Repository.findById(req.params.id);
+        const repo = await Repository.findByPk(req.params.id);
         if (!repo) return res.status(404).json({ message: 'Repo not found' });
 
-        // Delete from DB
-        await Repository.findByIdAndDelete(req.params.id);
+        // Delete from DB (Repo delete cascades usually, but here we just destroy repo)
+        await repo.destroy();
 
-        // Audit Log
         await AdminLog.create({
             adminId: req.user.id,
             action: 'DELETE_REPO',
-            targetId: repo._id,
-            details: { name: repo.name, owner: repo.owner },
+            targetId: repo.id,
+            details: { name: repo.name, owner: repo.ownerId },
             ipAddress: req.ip
         });
 
@@ -165,12 +158,26 @@ exports.deleteRepository = async (req, res) => {
 
 exports.getLogs = async (req, res) => {
     try {
-        const logs = await AdminLog.find()
-            .populate('adminId', 'username')
-            .sort({ timestamp: -1 })
-            .limit(100);
+        const logs = await AdminLog.findAll({
+            include: [{ model: User, as: 'admin', attributes: ['username'] }],
+            order: [['timestamp', 'DESC']],
+            limit: 100
+        });
         res.json(logs);
     } catch (err) {
+        res.status(500).json({ message: 'Server Error' });
+    }
+};
+
+exports.deleteLog = async (req, res) => {
+    try {
+        const log = await AdminLog.findByPk(req.params.id);
+        if (!log) return res.status(404).json({ message: 'Log not found' });
+
+        await log.destroy();
+        res.json({ message: 'Log deleted successfully' });
+    } catch (err) {
+        console.error(err);
         res.status(500).json({ message: 'Server Error' });
     }
 };
@@ -187,11 +194,10 @@ exports.getSettings = async (req, res) => {
 exports.updateSettings = async (req, res) => {
     try {
         let settings = await SystemSetting.findOne();
-        if (!settings) settings = new SystemSetting();
+        if (!settings) settings = await SystemSetting.create({});
 
-        Object.assign(settings, req.body);
-        settings.updatedAt = Date.now();
-        await settings.save();
+        // Update fields
+        await settings.update(req.body);
 
         await AdminLog.create({
             adminId: req.user.id,
@@ -208,17 +214,21 @@ exports.updateSettings = async (req, res) => {
 
 exports.getReports = async (req, res) => {
     try {
-        const reports = await Report.find()
-            .populate('reporterId', 'username email')
-            .sort({ createdAt: -1 })
-            .lean();
+        const reports = await Report.findAll({
+            include: [{ model: User, as: 'reporter', attributes: ['username', 'email'] }],
+            order: [['createdAt', 'DESC']],
+            raw: true,
+            nest: true // nested objects for reporter
+        });
 
-        // Enriched Reports with Target Details
+        // Enriched Reports
         const enrichedReports = await Promise.all(reports.map(async (report) => {
             let targetDetails = null;
 
             if (report.targetType === 'repo') {
-                const repo = await Repository.findById(report.targetId).populate('owner', 'username');
+                const repo = await Repository.findByPk(report.targetId, {
+                    include: [{ model: User, as: 'owner', attributes: ['username'] }]
+                });
                 if (repo) {
                     targetDetails = {
                         name: repo.name,
@@ -228,7 +238,7 @@ exports.getReports = async (req, res) => {
                     };
                 }
             } else if (report.targetType === 'user') {
-                const user = await User.findById(report.targetId);
+                const user = await User.findByPk(report.targetId);
                 if (user) {
                     targetDetails = {
                         username: user.username,
@@ -249,7 +259,7 @@ exports.getReports = async (req, res) => {
 
 exports.resolveReport = async (req, res) => {
     try {
-        const report = await Report.findById(req.params.id);
+        const report = await Report.findByPk(req.params.id);
         if (!report) return res.status(404).json({ message: 'Report not found' });
 
         report.status = 'resolved';
@@ -258,7 +268,7 @@ exports.resolveReport = async (req, res) => {
         await AdminLog.create({
             adminId: req.user.id,
             action: 'RESOLVE_REPORT',
-            targetId: report._id,
+            targetId: report.id,
             details: { reason: report.reason },
             ipAddress: req.ip
         });
@@ -272,11 +282,14 @@ exports.resolveReport = async (req, res) => {
 
 exports.getAllPullRequests = async (req, res) => {
     try {
-        const prs = await PullRequest.find()
-            .populate('author', 'username')
-            .populate('repository', 'name')
-            .sort({ createdAt: -1 })
-            .limit(50);
+        const prs = await PullRequest.findAll({
+            include: [
+                { model: User, as: 'author', attributes: ['username'] },
+                { model: Repository, as: 'repository', attributes: ['name'] }
+            ],
+            order: [['createdAt', 'DESC']],
+            limit: 50
+        });
         res.json(prs);
     } catch (err) {
         res.status(500).json({ message: 'Server Error' });
@@ -285,7 +298,7 @@ exports.getAllPullRequests = async (req, res) => {
 
 exports.forceClosePullRequest = async (req, res) => {
     try {
-        const pr = await PullRequest.findById(req.params.id);
+        const pr = await PullRequest.findByPk(req.params.id);
         if (!pr) return res.status(404).json({ message: 'PR not found' });
 
         pr.status = 'closed';
@@ -294,7 +307,7 @@ exports.forceClosePullRequest = async (req, res) => {
         await AdminLog.create({
             adminId: req.user.id,
             action: 'FORCE_CLOSE_PR',
-            targetId: pr._id,
+            targetId: pr.id,
             details: { title: pr.title },
             ipAddress: req.ip
         });
@@ -307,15 +320,15 @@ exports.forceClosePullRequest = async (req, res) => {
 
 exports.deletePullRequest = async (req, res) => {
     try {
-        const pr = await PullRequest.findById(req.params.id);
+        const pr = await PullRequest.findByPk(req.params.id);
         if (!pr) return res.status(404).json({ message: 'PR not found' });
 
-        await PullRequest.findByIdAndDelete(req.params.id);
+        await pr.destroy();
 
         await AdminLog.create({
             adminId: req.user.id,
             action: 'DELETE_PR',
-            targetId: pr._id,
+            targetId: pr.id,
             details: { title: pr.title },
             ipAddress: req.ip
         });

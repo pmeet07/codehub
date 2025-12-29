@@ -1,15 +1,10 @@
 require('dotenv').config();
-const mongoose = require('mongoose');
-const User = require('../src/models/User');
-const Repository = require('../src/models/Repository');
-const PullRequest = require('../src/models/PullRequest');
-
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/codehub';
+const { User, Repository, PullRequest, sequelize } = require('../src/models');
 
 const seedPRs = async () => {
     try {
-        await mongoose.connect(MONGO_URI);
-        console.log("Connected to MongoDB...");
+        await sequelize.authenticate();
+        console.log("Connected to PostgreSQL...");
 
         const user = await User.findOne();
         if (!user) {
@@ -22,44 +17,49 @@ const seedPRs = async () => {
             console.log("Creating demo repository...");
             repo = await Repository.create({
                 name: "demo-project",
-                owner: user._id,
+                ownerId: user.id,
                 description: "A demo project for testing",
-                visibility: "public",
-                language: "JavaScript"
+                isPrivate: false,
+                progLanguage: "JavaScript"
             });
         }
 
         console.log(`Seeding PRs for repo: ${repo.name} by user: ${user.username}`);
+
+        // Get max number
+        const lastPR = await PullRequest.findOne({
+            where: { repositoryId: repo.id },
+            order: [['number', 'DESC']] // Note: number is integer
+        });
+        let nextNum = (lastPR && !isNaN(lastPR.number)) ? lastPR.number + 1 : 1;
 
         const prs = [
             {
                 title: "Update README.md",
                 status: "open",
                 sourceBranch: "docs/update",
-                targetBranch: "main",
-                number: await getNextNumber(repo._id)
+                targetBranch: "main"
             },
             {
                 title: "Fix navigation bug",
                 status: "open",
                 sourceBranch: "fix/nav",
-                targetBranch: "main",
-                number: await getNextNumber(repo._id) + 1
+                targetBranch: "main"
             },
             {
                 title: "Legacy Code Removal",
                 status: "closed",
                 sourceBranch: "chore/cleanup",
-                targetBranch: "main",
-                number: await getNextNumber(repo._id) + 2
+                targetBranch: "main"
             }
         ];
 
         for (const p of prs) {
             await PullRequest.create({
                 ...p,
-                repository: repo._id,
-                author: user._id,
+                number: nextNum++,
+                repositoryId: repo.id,
+                authorId: user.id,
                 description: "Automated seeding."
             });
         }
@@ -69,14 +69,9 @@ const seedPRs = async () => {
     } catch (err) {
         console.error("Error Seeding:", err);
     } finally {
-        await mongoose.disconnect();
+        await sequelize.close();
         process.exit();
     }
 };
-
-// Helper to simulate auto-increment
-async function getNextNumber(repoId) {
-    return Math.floor(Math.random() * 1000) + 1;
-}
 
 seedPRs();

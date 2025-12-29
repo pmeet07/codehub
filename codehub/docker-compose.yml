@@ -8,11 +8,14 @@ services:
       - "5000:5000"
     environment:
       - PORT=5000
-      - MONGO_URI=mongodb://mongo:27017/codehub
+      - DATABASE_URL=postgres://postgres:password@postgres:5432/codehub
+      - JWT_SECRET=supersecretkey123
     env_file:
-      - ./backend/.env # Loads other secrets like API keys
+      - ./backend/.env
     depends_on:
-      - mongo
+      - postgres
+    volumes:
+      - ./backend/storage:/app/storage
     restart: always
 
   frontend:
@@ -24,14 +27,18 @@ services:
       - backend
     restart: always
 
-  mongo:
-    image: mongo:latest
-    container_name: codehub-mongo
+  postgres:
+    image: postgres:15-alpine
+    container_name: codehub-postgres
     ports:
-      - "27017:27017"
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=codehub
     volumes:
-      - mongo-data:/data/db
+      - postgres-data:/var/lib/postgresql/data
     restart: always
 
 volumes:
-  mongo-data:
+  postgres-data:

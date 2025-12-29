@@ -30,7 +30,7 @@ export default function FileViewer({ file, content, onClose, repo, branch }) {
         if (!newContent) return;
         setSaving(true);
         try {
-            await api.post(`/repos/${repo._id}/file`, {
+            await api.post(`/repos/${repo.id}/file`, {
                 branch: branch || 'main',
                 path: file.path,
                 content: newContent,
@@ -88,7 +88,7 @@ export default function FileViewer({ file, content, onClose, repo, branch }) {
         setLoading(true);
         setError(null);
         try {
-            const res = await api.post('/ai/explain', { code: content, language: lang });
+            const res = await api.post('/ai/explain', { code: content, language: lang || language });
             setExplanation(res.data.explanation);
         } catch (err) {
             console.error(err);

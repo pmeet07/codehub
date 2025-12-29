@@ -86,7 +86,7 @@ export default function Search() {
                 ) : (
                     <div className="grid gap-4">
                         {results.map(repo => (
-                            <div key={repo._id} className="bg-[#161b22] border border-gray-700 rounded-md p-4 hover:border-gray-500 transition group">
+                            <div key={repo.id} className="bg-[#161b22] border border-gray-700 rounded-md p-4 hover:border-gray-500 transition group">
                                 <div className="flex items-start justify-between">
                                     <div className="flex items-center gap-3">
                                         <div className="p-2 bg-gray-800 rounded-md">

@@ -19,12 +19,11 @@ export default function AdminReports() {
             <h1 className="text-2xl font-bold mb-6">Moderation Requests</h1>
             <div className="grid gap-4">
                 {reports.map(report => (
-                    <div key={report._id} className="bg-white dark:bg-[#161b22] border border-gray-200 dark:border-gray-700 p-4 rounded-lg flex justify-between items-center shadow-sm">
+                    <div key={report.id} className="bg-white dark:bg-[#161b22] border border-gray-200 dark:border-gray-700 p-4 rounded-lg flex justify-between items-center shadow-sm">
                         <div className="flex gap-4 items-start">
                             <div className="p-2 bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 rounded-lg">
                                 <ShieldCheckIcon className="w-6 h-6" />
                             </div>
-
 
                             <div>
                                 <h3 className="font-bold text-gray-700 dark:text-white uppercase text-xs tracking-wider mb-1">
@@ -60,7 +59,7 @@ export default function AdminReports() {
                             </span>
                             {report.status !== 'resolved' && (
                                 <button
-                                    onClick={() => resolve(report._id)}
+                                    onClick={() => resolve(report.id)}
                                     className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md text-sm font-bold flex items-center gap-2 transition-colors shadow-sm"
                                 >
                                     <CheckCircleIcon className="w-4 h-4" /> Resolve

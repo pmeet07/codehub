@@ -1,29 +1,39 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 require('dotenv').config();
 
-const API_KEY = process.env.GEMINI_API_KEY;
-const genAI = new GoogleGenerativeAI(API_KEY);
+// Script to list all available models for this specific API Key
+async function listAvailableModels() {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) {
+        console.log('❌ Error: GEMINI_API_KEY is missing in .env');
+        return;
+    }
 
-async function list() {
-    console.log("Listing models...");
+    // Direct REST call because the SDK wrapper might be hiding the listModels method
+    // or we just want raw output.
     try {
-        // Accessing the model directly to list (hacky via internal or if available)
-        // Actually standard SDK didn't expose listModels easily in v1, but let's try via direct fetch if SDK fails.
-        // Or check if the SDK has it. The error message implies it is possible.
-        // It seems newer SDKs do support it or we can use REST.
+        const fetch = (await import('node-fetch')).default;
+        const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${key}`;
 
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${API_KEY}`);
+        const response = await fetch(url);
         const data = await response.json();
 
-        if (data.error) {
-            console.log("Error listing models:", JSON.stringify(data.error, null, 2));
+        if (data.models) {
+            console.log('\n✅ AVAILABLE MODELS FOR YOUR KEY:');
+            console.log('-----------------------------------');
+            data.models.forEach(m => {
+                if (m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent')) {
+                    console.log(`Model: ${m.name.replace('models/', '')}`);
+                }
+            });
+            console.log('-----------------------------------\n');
         } else {
-            console.log("Available Models:");
-            (data.models || []).forEach(m => console.log(`- ${m.name}`));
+            console.log('❌ No models found or Error:', data);
         }
 
     } catch (err) {
-        console.error("Error:", err.message);
+        console.error('Fatal error listing models:', err);
     }
 }
-list();
+
+listAvailableModels();

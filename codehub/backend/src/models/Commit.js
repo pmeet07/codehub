@@ -1,41 +1,61 @@
-const mongoose = require('mongoose');
+const { DataTypes, Model } = require('sequelize');
+const sequelize = require('../config/database');
 
-const CommitSchema = new mongoose.Schema({
+class Commit extends Model { }
+
+Commit.init({
+    id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true
+    },
     repoId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Repository',
-        required: true,
-        index: true
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: {
+            model: 'repositories',
+            key: 'id'
+        }
     },
     hash: {
-        type: String,
-        required: true,
-        // unique: true // Removed global uniqueness to allow forks to have their own copies
-    }, // SHA-256
-    message: {
-        type: String,
-        required: true
+        type: DataTypes.STRING,
+        allowNull: false
     },
-    author: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
+    message: {
+        type: DataTypes.TEXT,
+        allowNull: false
+    },
+    authorId: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: {
+            model: 'users',
+            key: 'id'
+        }
     },
     parentHash: {
-        type: String,
-        default: null
-    }, // Linked list
+        type: DataTypes.STRING,
+        allowNull: true
+    },
     treeHash: {
-        type: String,
-        required: true
-    }, // Reference to the file tree snapshot
+        type: DataTypes.STRING,
+        allowNull: false
+    },
     timestamp: {
-        type: Date,
-        default: Date.now
+        type: DataTypes.DATE,
+        defaultValue: DataTypes.NOW
     }
+}, {
+    sequelize,
+    modelName: 'Commit',
+    tableName: 'commits',
+    timestamps: false, // We use 'timestamp' field
+    indexes: [
+        {
+            unique: true,
+            fields: ['repoId', 'hash']
+        }
+    ]
 });
 
-// Ensure hash is unique per repository
-CommitSchema.index({ repoId: 1, hash: 1 }, { unique: true });
-
-module.exports = mongoose.model('Commit', CommitSchema);
+module.exports = Commit;

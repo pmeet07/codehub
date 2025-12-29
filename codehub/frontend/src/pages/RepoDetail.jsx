@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import FileViewer from '../components/repo/FileViewer';
 import PullRequestList from '../components/repo/PullRequestList';
+import BranchList from '../components/repo/BranchList';
 import NewPullRequest from '../components/repo/NewPullRequest';
 import PullRequestDetail from '../components/repo/PullRequestDetail';
 import { FolderIcon, DocumentIcon, ClipboardDocumentIcon, EyeIcon, StarIcon, ShareIcon, CodeBracketIcon, PlusIcon, ClockIcon, ArrowPathRoundedSquareIcon, ShieldCheckIcon, ArrowDownTrayIcon, ArchiveBoxIcon } from '@heroicons/react/24/outline';
@@ -56,7 +57,7 @@ export default function RepoDetail() {
     const handleFileClick = async (file) => {
         setSelectedFile(file);
         try {
-            const { data } = await api.get(`/repos/${repo._id}/blob/${file.hash}?t=${Date.now()}`);
+            const { data } = await api.get(`/repos/${repo.id}/blob/${file.hash}?t=${Date.now()}`);
             setFileContent(data);
         } catch (e) {
             console.error("Failed to load file content", e);
@@ -64,17 +65,7 @@ export default function RepoDetail() {
         }
     };
 
-    const fetchCommits = async () => {
-        try {
-            setLoading(true);
-            const { data } = await api.get(`/repos/${repo._id}/commits?branch=${selectedBranch}`);
-            setCommits(data);
-            setLoading(false);
-        } catch (e) {
-            console.error(e);
-            setLoading(false);
-        }
-    };
+
 
     const [selectedBranch, setSelectedBranch] = useState('main');
     const [currentCommit, setCurrentCommit] = useState(null);
@@ -87,6 +78,14 @@ export default function RepoDetail() {
             try {
                 // Determine if we are looking for a fork? No API handles finding by owner/name
                 const { data } = await api.get(`/repos/${username}/${repoName}?branch=${selectedBranch}&t=${Date.now()}`);
+
+                // Auto-correct branch if selected one doesn't exist (e.g. 'main' vs 'master')
+                if (data.repo && data.repo.branches && !data.repo.branches.includes(selectedBranch)) {
+                    if (data.repo.defaultBranch) {
+                        setSelectedBranch(data.repo.defaultBranch);
+                    }
+                }
+
                 setRepo(data.repo);
                 setTree(data.tree || []);
                 setCurrentCommit(data.currentCommit);
@@ -101,11 +100,24 @@ export default function RepoDetail() {
     }, [username, repoName, selectedBranch]);
 
     // Fetch commits when tab changes to commits
+    // Fetch commits when tab changes to commits
     useEffect(() => {
         if (activeTab === 'commits' && repo) {
-            fetchCommits();
+            const fetchRepoCommits = async () => {
+                setCommits([]); // Clear stale commits immediately
+                setLoading(true);
+                try {
+                    const { data } = await api.get(`/repos/${repo.id}/commits?branch=${selectedBranch}&t=${Date.now()}`);
+                    setCommits(data);
+                } catch (e) {
+                    console.error(e);
+                } finally {
+                    setLoading(false);
+                }
+            };
+            fetchRepoCommits();
         }
-    }, [activeTab, repo, selectedBranch]);
+    }, [activeTab, repo?.id, selectedBranch]);
 
     const copyCloneCommand = () => {
         const command = `codehub clone http://localhost:5173/${username}/${repoName}`;
@@ -116,7 +128,7 @@ export default function RepoDetail() {
     const handleFork = async () => {
         if (!confirm(`Fork ${username}/${repoName} to your account?`)) return;
         try {
-            const { data } = await api.post(`/repos/${repo._id}/fork`);
+            const { data } = await api.post(`/repos/${repo.id}/fork`);
             alert("Fork created successfully!");
             navigate('/dashboard');
         } catch (e) {
@@ -126,7 +138,7 @@ export default function RepoDetail() {
 
     const createBranch = async (branchName) => {
         try {
-            await api.post(`/repos/${repo._id}/branches`, {
+            await api.post(`/repos/${repo.id}/branches`, {
                 branchName,
                 fromBranch: selectedBranch
             });
@@ -140,7 +152,7 @@ export default function RepoDetail() {
 
     const deleteBranch = async (branchName) => {
         try {
-            await api.delete(`/repos/${repo._id}/branches/${branchName}`);
+            await api.delete(`/repos/${repo.id}/branches/${branchName}`);
             setRepo(prev => ({ ...prev, branches: prev.branches.filter(b => b !== branchName) }));
             setSelectedBranch(repo.defaultBranch);
         } catch (e) {
@@ -155,7 +167,7 @@ export default function RepoDetail() {
         try {
             await api.post('/reports', {
                 targetType: 'repo',
-                targetId: repo._id,
+                targetId: repo.id,
                 reason,
                 description: 'User report via frontend'
             });
@@ -238,7 +250,13 @@ export default function RepoDetail() {
                     icon={ClockIcon}
                     label="Commits"
                 />
-                {/* Add more tabs like Issues, Settings later */}
+                <TabButton
+                    active={activeTab === 'branches'}
+                    onClick={() => setActiveTab('branches')}
+                    icon={ShareIcon}
+                    label="Branches"
+                    count={repo.branches ? repo.branches.length : 0}
+                />
             </div>
 
             {/* File Viewer Modal */}
@@ -258,6 +276,29 @@ export default function RepoDetail() {
             {activeTab === 'commits' && (
                 <div className="flex gap-6">
                     <div className="flex-1">
+                        {/* Branch Selector for Commits */}
+                        <div className="mb-4">
+                            <div className="relative inline-block text-left group">
+                                <select
+                                    value={selectedBranch}
+                                    onChange={(e) => setSelectedBranch(e.target.value)}
+                                    className="appearance-none bg-gray-50 dark:bg-[#21262d] text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-md pl-8 pr-8 py-1.5 text-sm outline-none focus:border-blue-500 font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-[#2c333c] transition min-w-[120px]"
+                                >
+                                    {repo.branches && repo.branches.length > 0 ? (
+                                        [...new Set([repo.defaultBranch || 'main', ...repo.branches])].map(b => (
+                                            <option key={b} value={b}>{b}</option>
+                                        ))
+                                    ) : (
+                                        <option value={repo.defaultBranch || 'main'}>{repo.defaultBranch || 'main'}</option>
+                                    )}
+                                </select>
+                                <svg className="w-4 h-4 absolute top-1/2 left-2.5 -translate-y-1/2 text-gray-500 dark:text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                                    <svg className="w-3 h-3 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="bg-white dark:bg-[#161b22] border dark:border-github-border border-gray-200 rounded-md overflow-hidden">
                             <div className="p-4 border-b dark:border-github-border border-gray-200 bg-gray-50 dark:bg-[#161b22] flex justify-between items-center">
                                 <h3 className="font-semibold text-gray-900 dark:text-white">Commit History</h3>
@@ -321,11 +362,11 @@ export default function RepoDetail() {
                                         className="appearance-none bg-gray-50 dark:bg-[#21262d] text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600 rounded-md pl-8 pr-8 py-1.5 text-sm outline-none focus:border-blue-500 font-medium cursor-pointer hover:bg-gray-100 dark:hover:bg-[#2c333c] transition min-w-[120px]"
                                     >
                                         {repo.branches && repo.branches.length > 0 ? (
-                                            repo.branches.map(b => (
+                                            [...new Set([repo.defaultBranch || 'main', ...repo.branches])].map(b => (
                                                 <option key={b} value={b}>{b}</option>
                                             ))
                                         ) : (
-                                            <option value="main">main</option>
+                                            <option value={repo.defaultBranch || 'main'}>{repo.defaultBranch || 'main'}</option>
                                         )}
                                     </select>
                                     <svg className="w-4 h-4 absolute top-1/2 left-2.5 -translate-y-1/2 text-gray-500 dark:text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
@@ -484,7 +525,7 @@ codehub push`}
                                 </div>
 
                                 <a
-                                    href={`http://localhost:5000/api/repos/${repo._id}/download?branch=${selectedBranch}&token=${localStorage.getItem('token')}`}
+                                    href={`http://localhost:5000/api/repos/${repo.id}/download?branch=${selectedBranch}&token=${localStorage.getItem('token')}`}
                                     className="w-full flex items-center justify-center gap-2 bg-[#238636] hover:bg-[#2ea043] text-white py-1.5 rounded-md text-sm font-semibold transition"
                                 >
                                     <ArrowDownTrayIcon className="w-4 h-4" /> Download ZIP
@@ -506,7 +547,7 @@ codehub push`}
                 <div>
                     {prView === 'list' && (
                         <PullRequestList
-                            repoId={repo._id}
+                            repoId={repo.id}
                             onCreate={() => setPrView('create')}
                             onSelect={(id) => { setSelectedPrId(id); setPrView('detail'); }}
                         />
@@ -525,6 +566,15 @@ codehub push`}
                         />
                     )}
                 </div>
+            ) : activeTab === 'branches' ? (
+                <BranchList
+                    branches={repo.detailedBranches || []}
+                    defaultBranch={repo.defaultBranch}
+                    onDelete={(name) => {
+                        if (confirm(`Delete branch '${name}'?`)) deleteBranch(name);
+                    }}
+                    repo={repo}
+                />
             ) : null}
         </div>
     );

@@ -44,7 +44,7 @@ export default function AdminRepositories() {
                     </thead>
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                         {repos.map(repo => (
-                            <tr key={repo._id} className="hover:bg-gray-50 dark:hover:bg-[#21262d] transition-colors">
+                            <tr key={repo.id} className="hover:bg-gray-50 dark:hover:bg-[#21262d] transition-colors">
                                 <td className="p-4 font-medium text-gray-900 dark:text-white">{repo.name}</td>
                                 <td className="p-4">{repo.owner?.username || 'Unknown'}</td>
                                 <td className="p-4">
@@ -58,7 +58,7 @@ export default function AdminRepositories() {
                                 <td className="p-4">{new Date(repo.createdAt).toLocaleDateString()}</td>
                                 <td className="p-4 text-right">
                                     <button
-                                        onClick={() => deleteRepo(repo._id)}
+                                        onClick={() => deleteRepo(repo.id)}
                                         className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 p-2 dark:hover:bg-red-900/30 rounded transition-colors"
                                         title="Delete Repository"
                                     >

@@ -42,7 +42,7 @@ export default function PullRequestList({ repoId, onCreate, onSelect }) {
             ) : (
                 <div className="bg-[#161b22] border border-github-border rounded-md divide-y divide-[#21262d]">
                     {prs.map(pr => (
-                        <div key={pr._id} className="p-4 hover:bg-[#0d1117] cursor-pointer" onClick={() => onSelect(pr._id)}>
+                        <div key={pr.id} className="p-4 hover:bg-[#0d1117] cursor-pointer" onClick={() => onSelect(pr.id)}>
                             <div className="flex justify-between items-start">
                                 <div>
                                     <h3 className="text-white font-semibold text-lg hover:text-blue-400 mb-1">

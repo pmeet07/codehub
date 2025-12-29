@@ -16,6 +16,7 @@ router.get('/repos', adminController.getRepositories);
 router.delete('/repos/:id', adminController.deleteRepository);
 
 router.get('/logs', adminController.getLogs);
+router.delete('/logs/:id', adminController.deleteLog);
 
 // PR Moderation
 router.get('/pull-requests', adminController.getAllPullRequests);

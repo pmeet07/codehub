@@ -1,67 +1,69 @@
-const mongoose = require('mongoose');
+const { DataTypes, Model } = require('sequelize');
+const sequelize = require('../config/database');
 
-const RepositorySchema = new mongoose.Schema({
+class Repository extends Model { }
+
+Repository.init({
+    id: {
+        type: DataTypes.UUID,
+        defaultValue: DataTypes.UUIDV4,
+        primaryKey: true
+    },
     name: {
-        type: String,
-        required: true,
-        trim: true,
+        type: DataTypes.STRING,
+        allowNull: false,
         validate: {
-            validator: function (v) {
-                return /^[a-zA-Z0-9-_]+$/.test(v);
-            },
-            message: 'Repository name can only contain letters, numbers, hyphens, and underscores.'
+            is: /^[a-zA-Z0-9-_]+$/
         }
     },
     progLanguage: {
-        type: String,
-        default: 'JavaScript'
+        type: DataTypes.STRING,
+        defaultValue: 'JavaScript'
     },
-    owner: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
+    ownerId: {
+        type: DataTypes.UUID,
+        allowNull: false,
+        references: {
+            model: 'users',
+            key: 'id'
+        }
     },
     description: {
-        type: String,
-        maxLength: 500
+        type: DataTypes.STRING(500),
+        allowNull: true
     },
     isPrivate: {
-        type: Boolean,
-        default: false
-    },
-    branches: {
-        type: Map,
-        of: String, // Stores commit hash for each branch
-        default: {}
+        type: DataTypes.BOOLEAN,
+        defaultValue: false
     },
     defaultBranch: {
-        type: String,
-        default: 'main'
+        type: DataTypes.STRING,
+        defaultValue: 'main'
     },
-    headCommit: { // We'll keep this as a cached pointer to default branch tip or deprecate it
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Commit' // Points to the latest commit
+    headCommitId: {
+        type: DataTypes.UUID,
+        allowNull: true
+        // References 'commits' - define association later to avoid circular dependency
     },
-    collaborators: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
-    }],
-    stars: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
-    }],
-    forkedFrom: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'Repository',
-        default: null
-    },
-    createdAt: {
-        type: Date,
-        default: Date.now
+    forkedFromId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+            model: 'repositories',
+            key: 'id'
+        }
     }
-}, { timestamps: true });
+}, {
+    sequelize,
+    modelName: 'Repository',
+    tableName: 'repositories',
+    timestamps: true,
+    indexes: [
+        {
+            unique: true,
+            fields: ['ownerId', 'name']
+        }
+    ]
+});
 
-// Ensure unique repo names per user
-RepositorySchema.index({ owner: 1, name: 1 }, { unique: true });
-
-module.exports = mongoose.model('Repository', RepositorySchema);
+module.exports = Repository;

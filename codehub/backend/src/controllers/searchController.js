@@ -1,41 +1,38 @@
-const Repository = require('../models/Repository');
-const User = require('../models/User');
-
-// Utility to escape regex characters
-function escapeRegex(text) {
-    return text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
-}
+const { Repository, User } = require('../models');
+const { Op } = require('sequelize');
 
 exports.searchRepositories = async (req, res) => {
     try {
-        const { q, language, sort } = req.query; // q = query string
+        const { q, language, sort } = req.query;
 
-        let query = { isPrivate: false }; // Only public repos
+        let where = { isPrivate: false };
 
         if (q && q.trim().length > 0) {
-            const regex = new RegExp(escapeRegex(q), 'gi'); // Global, Case-insensitive
-            query.$or = [
-                { name: regex },
-                { description: regex }
+            // Case insensitive search
+            const searchTerm = `%${q.trim()}%`;
+            where[Op.or] = [
+                { name: { [Op.iLike]: searchTerm } },
+                { description: { [Op.iLike]: searchTerm } }
             ];
         }
 
         if (language) {
-            query.progLanguage = language;
+            where.progLanguage = language;
         }
 
-        let sortOption = { createdAt: -1 }; // Default: Newest
+        let order = [['createdAt', 'DESC']];
         if (sort === 'stars') {
-            sortOption = { stars: -1 };
-        } else if (sort === 'forks') {
-            // Depending on how forks are tracked (via query/count or field)
-            // MVP: just sort by createdAt
+            // Assuming we have a virtual count or separate sort logic, but for now fallback to created
+            // Implementing sort by related 'stars' count is complex in simple query without aggregations
+            // We'll stick to basic sort or standard usage
         }
 
-        const repos = await Repository.find(query)
-            .populate('owner', 'username avatarUrl')
-            .sort(sortOption)
-            .limit(50);
+        const repos = await Repository.findAll({
+            where,
+            include: [{ model: User, as: 'owner', attributes: ['username', 'avatarUrl'] }],
+            order: order,
+            limit: 50
+        });
 
         res.json(repos);
     } catch (err) {
@@ -46,10 +43,12 @@ exports.searchRepositories = async (req, res) => {
 
 exports.getAllPublicRepos = async (req, res) => {
     try {
-        const repos = await Repository.find({ isPrivate: false })
-            .populate('owner', 'username avatarUrl')
-            .sort({ createdAt: -1 })
-            .limit(20);
+        const repos = await Repository.findAll({
+            where: { isPrivate: false },
+            include: [{ model: User, as: 'owner', attributes: ['username', 'avatarUrl'] }],
+            order: [['createdAt', 'DESC']],
+            limit: 20
+        });
         res.json(repos);
     } catch (err) {
         res.status(500).json({ message: 'Server Error' });
