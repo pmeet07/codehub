@@ -6,7 +6,7 @@ import PullRequestList from '../components/repo/PullRequestList';
 import BranchList from '../components/repo/BranchList';
 import NewPullRequest from '../components/repo/NewPullRequest';
 import PullRequestDetail from '../components/repo/PullRequestDetail';
-import { FolderIcon, DocumentIcon, ClipboardDocumentIcon, EyeIcon, StarIcon, ShareIcon, CodeBracketIcon, PlusIcon, ClockIcon, ArrowPathRoundedSquareIcon, ShieldCheckIcon, ArrowDownTrayIcon, ArchiveBoxIcon } from '@heroicons/react/24/outline';
+import { FolderIcon, DocumentIcon, ClipboardDocumentIcon, EyeIcon, StarIcon, ShareIcon, CodeBracketIcon, PlusIcon, ClockIcon, ArrowPathRoundedSquareIcon, ShieldCheckIcon, ArrowDownTrayIcon, ArchiveBoxIcon, CommandLineIcon, QuestionMarkCircleIcon, ComputerDesktopIcon } from '@heroicons/react/24/outline';
 
 function timeAgo(date) {
     if (!date) return '';
@@ -215,6 +215,9 @@ export default function RepoDetail() {
                         >
                             <ArrowPathRoundedSquareIcon className="w-4 h-4" />
                             Fork
+                            <span className="bg-gray-100 dark:bg-[#30363d] px-1.5 rounded-full text-[10px] text-gray-600 dark:text-gray-300">
+                                {repo.forkCount || 0}
+                            </span>
                         </button>
                     </div>
                 </div>
@@ -511,25 +514,51 @@ codehub push`}
                                 </div>
                             </div>
 
-                            <div className="mt-4">
-                                <div className="text-xs font-bold text-gray-600 dark:text-gray-400 mb-1">Clone this repository</div>
-                                <div className="flex mb-3">
-                                    <input
-                                        readOnly
-                                        value={`codehub clone http://localhost:5173/${username}/${repoName}`}
-                                        className="bg-gray-50 dark:bg-[#0d1117] text-gray-800 dark:text-gray-300 text-xs p-2 rounded-l-md border-y border-l dark:border-github-border border-gray-300 w-full outline-none font-mono"
-                                    />
-                                    <button onClick={copyCloneCommand} className="bg-gray-100 dark:bg-[#21262d] border dark:border-github-border border-gray-300 border-l-0 rounded-r-md px-2 hover:bg-gray-200 dark:hover:bg-[#30363d] transition">
-                                        <ClipboardDocumentIcon className="w-4 h-4 text-gray-600 dark:text-gray-300" />
-                                    </button>
+                            {/* Clone Section */}
+                            <div className="mt-4 bg-white dark:bg-[#161b22] border dark:border-github-border border-gray-200 rounded-md overflow-hidden">
+                                <div className="px-4 py-3 border-b dark:border-github-border border-gray-200 bg-gray-50 dark:bg-[#161b22] flex justify-between items-center">
+                                    <h3 className="font-semibold text-sm text-gray-900 dark:text-white flex items-center gap-2">
+                                        <CommandLineIcon className="w-4 h-4" />
+                                        Clone
+                                    </h3>
+                                    <QuestionMarkCircleIcon className="w-4 h-4 text-gray-500 cursor-pointer hover:text-blue-500" />
                                 </div>
 
-                                <a
-                                    href={`http://localhost:5000/api/repos/${repo.id}/download?branch=${selectedBranch}&token=${localStorage.getItem('token')}`}
-                                    className="w-full flex items-center justify-center gap-2 bg-[#238636] hover:bg-[#2ea043] text-white py-1.5 rounded-md text-sm font-semibold transition"
-                                >
-                                    <ArrowDownTrayIcon className="w-4 h-4" /> Download ZIP
-                                </a>
+                                <div className="p-4">
+                                    <div className="flex gap-4 border-b dark:border-github-border border-gray-200 mb-3">
+                                        <button className="pb-2 border-b-2 border-[#fd8c73] font-semibold text-gray-900 dark:text-white text-xs">HTTPS</button>
+                                    </div>
+
+                                    <div className="flex items-center bg-gray-50 dark:bg-[#0d1117] border dark:border-github-border border-gray-300 rounded-md mb-2 overflow-hidden">
+                                        <input
+                                            readOnly
+                                            value={`${window.location.origin}/${username}/${repoName}.git`}
+                                            className="bg-transparent text-gray-900 dark:text-gray-300 text-xs p-2.5 flex-1 outline-none font-mono"
+                                        />
+                                        <button
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(`${window.location.origin}/${username}/${repoName}.git`);
+                                                alert("Copied URL to clipboard!");
+                                            }}
+                                            className="p-2.5 border-l dark:border-github-border border-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800 transition bg-gray-100 dark:bg-[#21262d]"
+                                            title="Copy to clipboard"
+                                        >
+                                            <ClipboardDocumentIcon className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+                                        </button>
+                                    </div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                                        Clone using the web URL.
+                                    </p>
+
+                                    <div className="flex flex-col gap-1">
+                                        <a
+                                            href={`http://localhost:5000/api/repos/${repo.id}/download?branch=${selectedBranch}&token=${localStorage.getItem('token')}`}
+                                            className="w-full text-left flex items-center gap-2 py-2 px-2 hover:bg-gray-100 dark:hover:bg-[#21262d] rounded-md text-sm text-gray-700 dark:text-gray-300 transition font-medium"
+                                        >
+                                            <ArrowDownTrayIcon className="w-4 h-4" /> Download ZIP
+                                        </a>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div className="text-right">

@@ -4,6 +4,7 @@ import Navbar from './components/layout/Navbar';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import VerifyOtp from './pages/VerifyOtp';
 import Dashboard from './pages/Dashboard';
 import CreateRepo from './pages/CreateRepo';
 import RepoDetail from './pages/RepoDetail';
@@ -20,6 +21,7 @@ import AdminReports from './pages/admin/Reports';
 import AdminLogs from './pages/admin/Logs';
 import AdminSettings from './pages/admin/Settings';
 
+import Settings from './pages/Settings';
 import Search from './pages/Search';
 import AdminPullRequests from './pages/admin/PullRequests';
 
@@ -39,7 +41,9 @@ function App() {
                     <Route path="/search" element={<Search />} />
                     <Route path="/login" element={<Login />} />
                     <Route path="/signup" element={<Signup />} />
+                    <Route path="/verify-otp" element={<VerifyOtp />} />
                     <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/settings" element={<Settings />} />
                     <Route path="/new" element={<CreateRepo />} />
                     <Route path="/:username/:repoName" element={<RepoDetail />} />
                   </Routes>

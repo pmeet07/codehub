@@ -18,8 +18,12 @@ const Signup = () => {
         setError('');
         setIsLoading(true);
         try {
-            await register(username, email, password);
-            navigate('/dashboard');
+            const data = await register(username, email, password);
+            if (data.requiresVerification) {
+                navigate('/verify-otp', { state: { userId: data.userId, email: data.email } });
+            } else {
+                navigate('/dashboard');
+            }
         } catch (err) {
             setError(err.response?.data?.message || 'Registration failed');
         } finally {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -7,8 +7,9 @@ import { BookOpenIcon, SunIcon, MoonIcon, XMarkIcon } from '@heroicons/react/24/
 import { motion, AnimatePresence } from 'framer-motion';
 
 const Dashboard = () => {
-    const { user, setUser } = useAuth();
+    const { user, setUser, loading: authLoading } = useAuth();
     const { theme, toggleTheme } = useTheme();
+    const navigate = useNavigate();
     const [repos, setRepos] = useState([]);
     const [loading, setLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
@@ -18,6 +19,13 @@ const Dashboard = () => {
         website: '',
         avatarUrl: ''
     });
+
+    // Redirect if not logged in
+    useEffect(() => {
+        if (!authLoading && !user) {
+            navigate('/login');
+        }
+    }, [authLoading, user, navigate]);
 
     useEffect(() => {
         const fetchRepos = async () => {
@@ -30,8 +38,14 @@ const Dashboard = () => {
                 setLoading(false);
             }
         };
-        if (user) fetchRepos();
-    }, [user]);
+
+        if (user) {
+            fetchRepos();
+        } else if (!authLoading) {
+            // If no user and not loading (handled above by redirect), stop spinner
+            setLoading(false);
+        }
+    }, [user, authLoading]);
 
     const handleEditClick = () => {
         setEditForm({

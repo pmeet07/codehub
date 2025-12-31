@@ -65,6 +65,30 @@ User.init({
     website: {
         type: DataTypes.STRING,
         allowNull: true
+    },
+    twoFactorSecret: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    recoveryCodes: {
+        type: DataTypes.JSON,
+        allowNull: true
+    },
+    loginOtp: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    loginOtpExpires: {
+        type: DataTypes.DATE,
+        allowNull: true
+    },
+    isTwoFactorEnabled: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false
+    },
+    isVerified: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false
     }
 }, {
     sequelize,

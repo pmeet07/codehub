@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MagnifyingGlassIcon, ArrowRightOnRectangleIcon, Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
+import { MagnifyingGlassIcon, ArrowRightOnRectangleIcon, Bars3Icon, XMarkIcon, Cog6ToothIcon } from '@heroicons/react/24/outline';
 
 const Navbar = () => {
     const { user, logout } = useAuth();
@@ -64,6 +64,14 @@ const Navbar = () => {
                                     )}
                                     <span className="text-sm font-medium text-gray-200">{user.username}</span>
                                 </motion.div>
+
+                                <Link
+                                    to="/settings"
+                                    className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-all"
+                                    title="Settings"
+                                >
+                                    <Cog6ToothIcon className="w-5 h-5" />
+                                </Link>
 
                                 <button
                                     onClick={handleLogout}
@@ -144,6 +152,14 @@ const Navbar = () => {
                                                 <span className="text-xs text-gray-400">Pro Member</span>
                                             </div>
                                         </div>
+                                        <Link
+                                            to="/settings"
+                                            onClick={() => setIsMobileMenuOpen(false)}
+                                            className="flex items-center gap-3 text-gray-300 hover:text-white w-full"
+                                        >
+                                            <Cog6ToothIcon className="w-5 h-5" />
+                                            Settings
+                                        </Link>
                                         <button
                                             onClick={handleLogout}
                                             className="flex items-center gap-3 text-red-400 hover:text-red-300 w-full"

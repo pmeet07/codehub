@@ -10,6 +10,27 @@ const s3Service = require('../services/s3Service');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretkey123';
 
+// Helper: Read object with fallback to parent repo for forks
+const readWithFallback = async (repo, hash) => {
+    try {
+        return await s3Service.readObject(repo.id, hash);
+    } catch (e) {
+        if (repo.forkedFromId) {
+            let current = repo;
+            while (current.forkedFromId) {
+                const parent = await Repository.findByPk(current.forkedFromId);
+                if (!parent) break;
+                try {
+                    return await s3Service.readObject(parent.id, hash);
+                } catch (err) {
+                    current = parent;
+                }
+            }
+        }
+        throw e;
+    }
+};
+
 exports.createRepo = async (req, res) => {
     try {
         const { name, description, isPrivate, language } = req.body;
@@ -72,6 +93,9 @@ exports.getRepoByName = async (req, res) => {
 
         if (!repo) return res.status(404).json({ message: 'Repository not found' });
 
+        // Count forks
+        const forkCount = await Repository.count({ where: { forkedFromId: repo.id } });
+
         // Check privacy
         if (repo.isPrivate) {
             if (!req.user || (req.user.id !== repo.ownerId)) {
@@ -105,7 +129,7 @@ exports.getRepoByName = async (req, res) => {
             try {
                 // Fetch tree from S3 (or fallback)
                 // Note: readObject returns a Buffer, we need string for JSON parse
-                const treeContent = await s3Service.readObject(repo.id, treeHash);
+                const treeContent = await readWithFallback(repo, treeHash);
                 tree = JSON.parse(treeContent.toString('utf-8'));
                 tree = JSON.parse(treeContent);
 
@@ -133,7 +157,7 @@ exports.getRepoByName = async (req, res) => {
 
                     let parentTree = [];
                     try {
-                        const ptContent = await s3Service.readObject(repo.id, parent.treeHash);
+                        const ptContent = await readWithFallback(repo, parent.treeHash);
                         parentTree = JSON.parse(ptContent.toString('utf-8'));
                     } catch (e) { }
 
@@ -170,6 +194,7 @@ exports.getRepoByName = async (req, res) => {
 
         // Return flattened repo object with branches
         const repoData = repo.toJSON();
+        repoData.forkCount = forkCount;
         repoData.branches = branchList; // Frontend expects array of strings
 
         // detailed branches for UI
@@ -228,12 +253,15 @@ exports.downloadRepoZip = async (req, res) => {
         const commit = await Commit.findOne({ where: { repoId, hash: commitHash } });
         if (!commit) return res.status(404).json({ message: 'Commit object missing' });
 
-        const storagePath = path.join(__dirname, '../../storage', repoId);
-        const treePath = path.join(storagePath, commit.treeHash);
-
-        if (!fs.existsSync(treePath)) return res.status(404).json({ message: 'Tree missing' });
-
-        const tree = JSON.parse(await fs.readFile(treePath));
+        // Retrieve Tree
+        let tree;
+        try {
+            const treeBuffer = await readWithFallback(repo, commit.treeHash);
+            tree = JSON.parse(treeBuffer.toString('utf-8'));
+        } catch (e) {
+            console.error("Tree read error:", e);
+            return res.status(404).json({ message: 'Tree missing' });
+        }
 
         const archive = archiver('zip', { zlib: { level: 9 } });
 
@@ -242,22 +270,30 @@ exports.downloadRepoZip = async (req, res) => {
 
         for (const file of tree) {
             if (file.type === 'blob') {
-                const filePath = path.join(storagePath, file.hash);
-                if (fs.existsSync(filePath)) {
-                    const fileContent = await fs.readFile(filePath);
+                try {
+                    const fileContent = await readWithFallback(repo, file.hash);
                     let finalBuffer;
                     try {
                         const decompressed = zlib.inflateSync(fileContent);
+                        // Header check: "blob <size>\0<content>"
                         const nullIndex = decompressed.indexOf(0);
                         if (nullIndex !== -1 && nullIndex < 50) {
-                            finalBuffer = decompressed.slice(nullIndex + 1);
+                            const header = decompressed.slice(0, nullIndex).toString('utf-8');
+                            if (header.startsWith('blob')) {
+                                finalBuffer = decompressed.slice(nullIndex + 1);
+                            } else {
+                                finalBuffer = decompressed;
+                            }
                         } else {
                             finalBuffer = decompressed;
                         }
                     } catch (e) {
+                        // Content might not be compressed or zlib error
                         finalBuffer = fileContent;
                     }
                     archive.append(finalBuffer, { name: file.path });
+                } catch (e) {
+                    console.warn(`Failed to read blob ${file.hash} for file ${file.path}`, e);
                 }
             }
         }
@@ -273,19 +309,17 @@ exports.downloadRepoZip = async (req, res) => {
 exports.getFileContent = async (req, res) => {
     try {
         const { repoId, hash } = req.params;
-        let storagePath = path.join(__dirname, '../../storage', repoId, 'objects', hash);
+        const repo = await Repository.findByPk(repoId);
 
-        // Fallback for legacy flat structure
-        if (!fs.existsSync(storagePath)) {
-            const legacyPath = path.join(__dirname, '../../storage', repoId, hash);
-            if (fs.existsSync(legacyPath)) {
-                storagePath = legacyPath;
-            } else {
-                return res.status(404).json({ message: 'File blob not found' });
-            }
+        if (!repo) return res.status(404).json({ message: 'Repo not found' });
+
+        // Use fallback logic to support forks
+        let fileBuffer;
+        try {
+            fileBuffer = await readWithFallback(repo, hash);
+        } catch (e) {
+            return res.status(404).json({ message: 'File blob not found' });
         }
-
-        const fileBuffer = await fs.readFile(storagePath);
 
         try {
             const zlib = require('zlib');
@@ -330,6 +364,7 @@ exports.getFileContent = async (req, res) => {
                 }
                 return buf.toString('utf-8');
             };
+            // Fallback if not compressed/zlib fails (might be raw)
             return res.send(decodeBuffer(fileBuffer));
         }
     } catch (err) {
