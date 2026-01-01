@@ -233,7 +233,145 @@ exports.updatePullRequestStatus = async (req, res) => {
         await pr.save();
         res.json(pr);
 
+        res.json(pr);
+
     } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
+exports.getPullRequestCommits = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const pr = await PullRequest.findByPk(id);
+        if (!pr) return res.status(404).json({ message: 'PR not found' });
+
+        const sourceRepo = await Repository.findByPk(pr.sourceRepoId);
+        if (!sourceRepo) return res.status(404).json({ message: 'Source Repo not found' });
+
+        const sourceBranchRecord = await Branch.findOne({ where: { repoId: sourceRepo.id, name: pr.sourceBranch } });
+        if (!sourceBranchRecord) return res.json([]); // Branch deleted?
+
+        const headHash = sourceBranchRecord.commitHash;
+
+        // Fetch commits walking back from head
+        const commits = [];
+        let currentHash = headHash;
+        const LIMIT = 50;
+
+        // Optimization: In a real world, we should stop at the "merge base" (common ancestor with target).
+        // For MVP, we'll fetch last 50 commits of source branch.
+
+        while (currentHash && commits.length < LIMIT) {
+            const commit = await Commit.findOne({
+                where: { repoId: sourceRepo.id, hash: currentHash },
+                include: [{ model: User, as: 'author', attributes: ['username', 'avatarUrl'] }]
+            });
+            if (!commit) break; // Should not happen if data consistent
+
+            commits.push(commit);
+            currentHash = commit.parentHash;
+        }
+
+        res.json(commits);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+};
+
+exports.getPullRequestFiles = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const pr = await PullRequest.findByPk(id);
+        if (!pr) return res.status(404).json({ message: 'PR not found' });
+
+        const sourceRepo = await Repository.findByPk(pr.sourceRepoId);
+        const targetRepo = await Repository.findByPk(pr.repositoryId); // target repo
+
+        const sourceBranchRecord = await Branch.findOne({ where: { repoId: sourceRepo.id, name: pr.sourceBranch } });
+        const targetBranchRecord = await Branch.findOne({ where: { repoId: targetRepo.id, name: pr.targetBranch } });
+
+        if (!sourceBranchRecord || !targetBranchRecord) {
+            return res.status(404).json({ message: 'Branches not found' });
+        }
+
+        const sourceHead = await Commit.findOne({ where: { repoId: sourceRepo.id, hash: sourceBranchRecord.commitHash } });
+        const targetHead = await Commit.findOne({ where: { repoId: targetRepo.id, hash: targetBranchRecord.commitHash } });
+
+        if (!sourceHead) return res.json([]);
+
+        // Helper to get all files from a tree recursively
+        const getAllFiles = async (repoId, treeHash, basePath = '') => {
+            const files = new Map();
+            try {
+                const storagePath = path.join(__dirname, '../../storage', repoId.toString(), 'objects', treeHash);
+                if (!await fs.pathExists(storagePath)) return files;
+
+                const treeContent = await fs.readFile(storagePath);
+                const tree = JSON.parse(treeContent.toString('utf-8'));
+
+                for (const item of tree) {
+                    const fullPath = basePath ? `${basePath}/${item.path}` : item.path;
+                    if (item.type === 'blob') {
+                        files.set(fullPath, item.hash);
+                    } else if (item.type === 'tree') {
+                        // Recursion would go here, assuming tree has type? 
+                        // Current usage in 'repoController' implies flattened paths in tree?
+                        // Let's check 'repoController' step 32... 
+                        // It maps 'f.path' which seems relative to root.
+                        // Assuming flat list if createRepo uses glob.
+                        files.set(item.path, item.hash);
+                    }
+                }
+            } catch (e) { console.error(e); }
+            return files;
+        };
+
+        // Note: Our current commit logic stores FLATTENED trees (list of all files with paths).
+        // So we don't need recursion if 'tree' is already flat.
+        // Let's verify 'commands.js' commit logic... 
+        // "glob.sync('**/*')" -> flat list.
+        // So we can just compare the two tree arrays directly.
+
+        const getTree = async (repoId, treeHash) => {
+            const storagePath = path.join(__dirname, '../../storage', repoId.toString(), 'objects', treeHash);
+            try {
+                if (await fs.pathExists(storagePath)) {
+                    const content = await fs.readFile(storagePath);
+                    return JSON.parse(content.toString('utf-8'));
+                }
+            } catch (e) { }
+            return [];
+        };
+
+        const sourceTree = await getTree(sourceRepo.id, sourceHead.treeHash);
+        const targetTree = await getTree(targetRepo.id, targetHead ? targetHead.treeHash : 'empty');
+
+        const sourceMap = new Map(sourceTree.map(f => [f.path, f.hash]));
+        const targetMap = new Map(targetTree.map(f => [f.path, f.hash]));
+
+        const changes = [];
+
+        // Added or Modified
+        for (const [filePath, hash] of sourceMap) {
+            if (!targetMap.has(filePath)) {
+                changes.push({ status: 'added', path: filePath });
+            } else if (targetMap.get(filePath) !== hash) {
+                changes.push({ status: 'modified', path: filePath });
+            }
+        }
+
+        // Deleted
+        for (const [filePath, hash] of targetMap) {
+            if (!sourceMap.has(filePath)) {
+                changes.push({ status: 'deleted', path: filePath });
+            }
+        }
+
+        res.json(changes);
+
+    } catch (err) {
+        console.error("Files Diff Error:", err);
         res.status(500).json({ message: err.message });
     }
 };

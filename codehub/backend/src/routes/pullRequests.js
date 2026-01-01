@@ -19,4 +19,10 @@ router.post('/:id/merge', auth, pullRequestController.mergePullRequest);
 // Update Status (Close/Reopen)
 router.put('/:id/status', auth, pullRequestController.updatePullRequestStatus);
 
+// Get PR Commits
+router.get('/:id/commits', auth, pullRequestController.getPullRequestCommits);
+
+// Get PR Files
+router.get('/:id/files', auth, pullRequestController.getPullRequestFiles);
+
 module.exports = router;

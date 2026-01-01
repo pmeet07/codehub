@@ -1,0 +1,37 @@
+const { BetaAnalyticsDataClient } = require("@google-analytics/data");
+
+const analyticsDataClient = new BetaAnalyticsDataClient({
+    keyFilename: "./serviceAccountKey.json",
+});
+
+async function getAnalyticsData() {
+    const propertyId = "402345678"; // your GA4 property ID
+
+    const [response] = await analyticsDataClient.runReport({
+        property: `properties/${propertyId}`,
+        dateRanges: [
+            {
+                startDate: "7daysAgo",
+                endDate: "today",
+            },
+        ],
+        dimensions: [
+            { name: "date" },
+        ],
+        metrics: [
+            { name: "activeUsers" },
+            { name: "eventCount" },
+        ],
+    });
+
+    console.log("Analytics Data:");
+    response.rows.forEach(row => {
+        console.log({
+            date: row.dimensionValues[0].value,
+            activeUsers: row.metricValues[0].value,
+            eventCount: row.metricValues[1].value,
+        });
+    });
+}
+
+getAnalyticsData().catch(console.error);//hiii helloo meet

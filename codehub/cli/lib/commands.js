@@ -34,7 +34,12 @@ exports.init = async () => {
     }
 
     await fs.ensureDir(path.join(codehubDir, 'objects'));
-    await fs.writeJson(path.join(codehubDir, 'config.json'), { head: null, remote: null, currentBranch: 'main' });
+    await fs.writeJson(path.join(codehubDir, 'config.json'), {
+        head: null,
+        remote: null,
+        currentBranch: 'main',
+        branches: { 'main': null }
+    });
     await fs.writeJson(path.join(codehubDir, 'index.json'), []); // Staging area
 
     console.log(chalk.green('Initialized empty CodeHub repository in ' + codehubDir));
@@ -54,8 +59,29 @@ exports.login = async () => {
             password: answers.password
         });
 
-        await fs.writeJson(CONFIG_FILE, { token: res.data.token, user: res.data.user });
-        console.log(chalk.green('Logged in successfully!'));
+        if (res.data.message === '2FA required') {
+            console.log(chalk.yellow(`Two-factor authentication required (${res.data.method || 'code'}).`));
+            if (res.data.devOtp) {
+                console.log(chalk.gray(`(Dev OTP: ${res.data.devOtp})`));
+            }
+
+            const otpAnswer = await inquirer.prompt([
+                { type: 'input', name: 'otp', message: 'Enter Verification Code:' }
+            ]);
+
+            const verifyRes = await axios.post(`${API_URL}/auth/verify-login-any`, {
+                userId: res.data.userId,
+                token: otpAnswer.otp
+            });
+
+            await fs.writeJson(CONFIG_FILE, { token: verifyRes.data.token, user: verifyRes.data.user });
+            console.log(chalk.green('Logged in successfully!'));
+        } else if (res.data.token) {
+            await fs.writeJson(CONFIG_FILE, { token: res.data.token, user: res.data.user });
+            console.log(chalk.green('Logged in successfully!'));
+        } else {
+            console.log(chalk.red('Login failed: No authentication token received.'));
+        }
     } catch (err) {
         console.error(chalk.red('Login failed: ' + (err.response?.data?.message || err.message)));
     }
@@ -169,8 +195,11 @@ exports.commit = async (options) => {
 
     await fs.writeFile(path.join(root, '.codehub', 'objects', commitHash), commitContent);
 
-    // 3. Update HEAD
+    // 3. Update HEAD and Branch
     config.head = commitHash;
+    if (!config.branches) config.branches = {};
+    config.branches[config.currentBranch] = commitHash;
+
     await fs.writeJson(configPath, config);
 
     console.log(chalk.green(`[${config.currentBranch} ${commitHash.substring(0, 7)}] ${options.message}`));
@@ -185,23 +214,29 @@ exports.branch = async (branchName) => {
 
     const configPath = path.join(root, '.codehub', 'config.json');
     const config = await fs.readJson(configPath);
+    if (!config.branches) config.branches = {};
 
     if (!branchName) {
-        // List branches (local only for now, simplistic)
-        console.log(chalk.green(`* ${config.currentBranch}`));
+        // List branches
+        const branches = Object.keys(config.branches);
+        if (branches.length === 0 && config.currentBranch) branches.push(config.currentBranch); // Fallback
+
+        branches.forEach(b => {
+            const isCurrent = (b === config.currentBranch);
+            console.log(isCurrent ? chalk.green(`* ${b}`) : `  ${b}`);
+        });
         return;
     }
 
     // Create new branch
-    // For now, this is just a pointer switch in a real VCS, but here we just store it in config?
-    // Actually, we need to store branch heads locally. 
-    // Let's implement a simple model: config.branches = { branchName: headHash }
+    if (config.branches[branchName]) {
+        console.error(chalk.red(`Branch '${branchName}' already exists.`));
+        return;
+    }
 
-    // BUT for this MVP, let's just allow switching the "currentBranch" name in config
-    // assuming we are branching off the current HEAD.
-    console.log(chalk.blue(`Switched to branch '${branchName}'`));
-    config.currentBranch = branchName;
+    config.branches[branchName] = config.head;
     await fs.writeJson(configPath, config);
+    console.log(chalk.green(`Branch '${branchName}' created.`));
 };
 
 
@@ -229,12 +264,13 @@ exports.push = async () => {
     // Extract repo data
     try {
         const urlParts = repoConfig.remote.split('/');
-        const repoName = urlParts.pop();
+        let repoName = urlParts.pop();
+        if (repoName.endsWith('.git')) repoName = repoName.slice(0, -4);
         const username = urlParts.pop();
 
         // 1. Get Repo ID
         console.log(chalk.blue('Fetching repository info...'));
-        const { data: { repo } } = await axios.get(`${API_URL}/repos/${username}/${repoName}`);
+        const { data: { repo } } = await axios.get(`${API_URL}/repos/${encodeURIComponent(username)}/${encodeURIComponent(repoName)}`);
 
         // 2. Gather history
         const commitHash = repoConfig.head;
@@ -299,14 +335,15 @@ exports.pull = async () => {
 
     try {
         const urlParts = config.remote.split('/');
-        const repoName = urlParts.pop();
+        let repoName = urlParts.pop();
+        if (repoName.endsWith('.git')) repoName = repoName.slice(0, -4);
         const username = urlParts.pop();
         const branch = config.currentBranch || 'main';
 
         console.log(chalk.blue(`Pulling from ${username}/${repoName} (${branch})...`));
 
         // 1. Fetch Remote State
-        const { data: { repo, tree, currentCommit } } = await axios.get(`${API_URL}/repos/${username}/${repoName}?branch=${branch}`);
+        const { data: { repo, tree, currentCommit } } = await axios.get(`${API_URL}/repos/${encodeURIComponent(username)}/${encodeURIComponent(repoName)}?branch=${encodeURIComponent(branch)}`);
 
         if (!currentCommit) {
             console.log(chalk.yellow('Branch is empty or does not exist on remote.'));
@@ -371,9 +408,10 @@ exports.branch = async (branchName) => {
     if (config.remote) {
         try {
             const urlParts = config.remote.split('/');
-            const repoName = urlParts.pop();
+            let repoName = urlParts.pop();
+            if (repoName.endsWith('.git')) repoName = repoName.slice(0, -4);
             const username = urlParts.pop();
-            const { data: { repo } } = await axios.get(`${API_URL}/repos/${username}/${repoName}`);
+            const { data: { repo } } = await axios.get(`${API_URL}/repos/${encodeURIComponent(username)}/${encodeURIComponent(repoName)}`);
 
             console.log(chalk.blue('Branches:'));
             // Ensure repo.branches is an array (API might return object/map)
@@ -397,7 +435,7 @@ exports.branch = async (branchName) => {
     }
 };
 
-exports.checkout = async (branchName) => {
+exports.checkout = async (branchName, options) => {
     const root = getRepoRoot();
     if (!root) {
         console.error(chalk.red('Not a CodeHub repository.'));
@@ -410,25 +448,68 @@ exports.checkout = async (branchName) => {
 
     const configPath = path.join(root, '.codehub', 'config.json');
     const config = await fs.readJson(configPath);
+    if (!config.branches) config.branches = {};
 
+    if (options.create) {
+        if (config.branches[branchName]) {
+            console.error(chalk.red(`Branch '${branchName}' already exists.`));
+            return;
+        }
+        config.branches[branchName] = config.head;
+        console.log(chalk.green(`Switched to a new branch '${branchName}'`));
+    } else {
+        if (!config.branches[branchName]) {
+            console.error(chalk.red(`Branch '${branchName}' not found.`));
+            return;
+        }
+    }
+
+    // Switch Logic
     if (config.currentBranch === branchName) {
         console.log(chalk.green(`Already on '${branchName}'`));
         return;
     }
 
-    config.currentBranch = branchName;
-    await fs.writeJson(configPath, config);
-    console.log(chalk.green(`Switched to branch '${branchName}'`));
+    // Restore File State (Simplified: Overwrite files from target head)
+    const targetHash = config.branches[branchName];
+    if (targetHash && targetHash !== config.head) {
+        try {
+            // 1. Read Commit
+            const commitContent = await fs.readFile(path.join(root, '.codehub', 'objects', targetHash));
+            const commit = JSON.parse(commitContent);
 
-    // Auto-pull to sync state
-    await exports.pull();
+            // 2. Read Tree
+            const treeContent = await fs.readFile(path.join(root, '.codehub', 'objects', commit.treeHash));
+            const tree = JSON.parse(treeContent);
+
+            // 3. Restore Files
+            for (const file of tree) {
+                const filePath = path.join(root, file.path);
+                const objectPath = path.join(root, '.codehub', 'objects', file.hash);
+                if (fs.existsSync(objectPath)) {
+                    const content = await fs.readFile(objectPath);
+                    await fs.outputFile(filePath, content);
+                }
+            }
+            // Note: This naive restore doesn't delete files that shouldn't exist.
+        } catch (e) {
+            console.log(chalk.yellow('Warning: Could not fully restore workspace files.'));
+        }
+    }
+
+    config.currentBranch = branchName;
+    config.head = config.branches[branchName];
+    await fs.writeJson(configPath, config);
+
+    if (!options.create) console.log(chalk.green(`Switched to branch '${branchName}'`));
 };
 
 exports.clone = async (url) => {
     // url example: http://localhost:5173/username/repoName
     try {
         const urlParts = url.split('/');
-        const repoName = urlParts.pop();
+        let repoName = urlParts.pop();
+        if (repoName.endsWith('.git')) repoName = repoName.slice(0, -4);
         const username = urlParts.pop();
 
         const targetDir = path.join(process.cwd(), repoName);
@@ -440,7 +521,7 @@ exports.clone = async (url) => {
         console.log(chalk.blue(`Cloning into '${repoName}'...`));
 
         // 1. Get Repo Details
-        const { data: { repo, tree } } = await axios.get(`${API_URL}/repos/${username}/${repoName}`);
+        const { data: { repo, tree } } = await axios.get(`${API_URL}/repos/${encodeURIComponent(username)}/${encodeURIComponent(repoName)}`);
 
         // 2. Setup Directory
         await fs.ensureDir(targetDir);

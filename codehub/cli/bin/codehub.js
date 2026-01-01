@@ -53,6 +53,7 @@ program
 program
     .command('checkout <branch>')
     .description('Switch branches or restore working tree files')
+    .option('-b, --create', 'Create a new branch')
     .action(commands.checkout);
 
 program
